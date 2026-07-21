@@ -15,6 +15,7 @@ ported yet, the page says so explicitly rather than describing something that do
 ## Integrations
 
 - [Command-line interface](cli.md) — one-shot cached and forced usage reads for agents and scripts
+- [Local HTTP API](local-http-api.md) — a read-only loopback API other local apps can consume
 - [Proxy](proxy.md) — route provider requests through HTTP(S) (SOCKS5 is read but degraded)
 
 ## Providers

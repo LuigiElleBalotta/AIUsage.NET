@@ -30,34 +30,40 @@ refresh produced a warning or a provider-level error.
 
 ## Output shape
 
-Output is JSON. Requesting no provider returns an object keyed by provider ID, each value the
-provider's normalized snapshot (`displayName`, `plan`, `lines`, `refreshedAt`, `warning`, `error`).
-Requesting one provider (`aiusage codex`) returns just that provider's snapshot object directly, not
-wrapped in a keyed envelope.
+Output is the `openusage.limits.v1` envelope — the exact same shape served by the
+[local HTTP API](local-http-api.md)'s `/v1/limits` and `/v1/limits/:id` routes (`aiusage` calls the
+same routing/encoding logic in-process, so both surfaces always agree). Requesting no provider
+returns every enabled provider under `providers`; requesting one provider (`aiusage codex`) returns
+an envelope containing just that provider.
 
 ```jsonc
 {
-  "displayName": "Codex",
-  "plan": "Free",
-  "lines": [
-    { "label": "Session", "type": "progress", "used": 0, "limit": 100,
-      "format": { "kind": "percent" }, "resetsAt": "2026-08-20T09:37:38+00:00",
-      "periodDurationMs": 2592000000 },
-    { "label": "Credits", "type": "values",
-      "values": [ { "Number": 38.88, "Kind": "Dollars" }, { "Number": 972, "Kind": "Count", "Label": "credits" } ] }
-  ],
-  "refreshedAt": "2026-07-21T09:37:37.0441133+00:00",
-  "warning": null,
-  "error": null
+  "schema": "openusage.limits.v1",
+  "generatedAt": "2026-07-21T13:04:22.971Z",
+  "providers": {
+    "codex": {
+      "displayName": "Codex",
+      "plan": "Free",
+      "fetchedAt": "2026-07-21T13:04:22.927Z",
+      "expiresAt": "2026-07-21T13:09:22.927Z",
+      "stale": false,
+      "resources": {
+        "session": {
+          "kind": "consumption", "unit": "percent",
+          "used": 0, "limit": 100, "remaining": 100, "utilization": 0,
+          "resetsAt": "2026-08-20T13:04:24.000Z", "windowSeconds": 2592000
+        },
+        "credits": { "kind": "balance", "unit": "credits", "available": 972 },
+        "creditValue": { "kind": "balance", "unit": "usd", "available": 38.88 }
+      }
+    }
+  },
+  "errors": []
 }
 ```
 
-Line types are `text`, `values`, `progress`, `badge`, and `chart` — the same shapes described in
-[the `MetricLine` model](../src/AIUsage.Core/Models/MetricLine.cs). This is a direct JSON dump of
-`ProviderSnapshot` rather than the original's dedicated `/v1/limits` stable-resource-ID envelope — the
-local HTTP API that format was designed to share with is not ported (see
-[architecture.md](architecture.md#local-http-api)), so `aiusage`'s output shape may still change if
-that's added later.
+See [Local HTTP API](local-http-api.md) for the full field reference (`kind`, `unit`, `stale`,
+per-provider resource keys) — it applies identically here.
 
 ## Install on `PATH`
 

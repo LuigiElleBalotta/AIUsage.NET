@@ -1,6 +1,3 @@
-using System.Text.Json;
-using System.Text.Json.Serialization;
-using AIUsage.Core.Models;
 using AIUsage.Core.Providers;
 using AIUsage.Core.Stores;
 
@@ -14,12 +11,12 @@ public sealed class UnknownProviderException : Exception
 }
 
 /// <summary>
-/// One-shot access to the same provider cache and refresh engine the tray app uses. Simplified port of
-/// the Swift UsageReader: shares the exact same persisted <see cref="ProviderSnapshotCache"/> file (so
-/// the CLI and the tray app never disagree about "is this fresh"), but returns a plain JSON snapshot
-/// dump instead of routing through the (not yet ported) LocalUsageAPI response shape — see
-/// PORTING_NOTES.md. Owns no timer, tray icon, or other long-lived app service; it constructs its own
-/// provider set for the duration of one read.
+/// One-shot access to the same provider cache and refresh engine the tray app uses. Direct port of the
+/// Swift UsageReader: shares the exact same persisted <see cref="ProviderSnapshotCache"/> file (so the
+/// CLI and the tray app never disagree about "is this fresh"), and now routes the actual response
+/// through <see cref="LocalUsageApi"/>'s pure `/v1/limits` responder — the exact same wire shape the
+/// local HTTP API and CLI both serve (see docs/local-http-api.md). Owns no timer, tray icon, or other
+/// long-lived app service; it constructs its own provider set for the duration of one read.
 /// </summary>
 public sealed class UsageReader
 {
@@ -29,12 +26,6 @@ public sealed class UsageReader
     {
         _providersOverride = providersOverride;
     }
-
-    private static readonly JsonSerializerOptions OutputJsonOptions = new()
-    {
-        WriteIndented = true,
-        Converters = { new JsonStringEnumConverter() }
-    };
 
     public async Task<UsageReadResult> ReadAsync(string? requestedProviderId = null, bool force = false, CancellationToken cancellationToken = default)
     {
@@ -78,22 +69,16 @@ public sealed class UsageReader
             warnings = orderedIds.Where(errors.ContainsKey).Select(id => $"{id}: {errors[id]}").ToList();
         }
 
-        var payload = new Dictionary<string, object?>();
-        foreach (var id in enabledOrderedIds)
-        {
-            if (!snapshots.TryGetValue(id, out var snapshot)) continue;
-            payload[id] = new
-            {
-                displayName = snapshot.DisplayName,
-                plan = snapshot.Plan,
-                lines = snapshot.Lines,
-                refreshedAt = snapshot.RefreshedAt,
-                warning = snapshot.Warning,
-                error = errors.GetValueOrDefault(id)
-            };
-        }
+        var state = new LocalUsageApi.State(
+            EnabledOrderedIds: enabledOrderedIds,
+            KnownIds: knownIds,
+            Snapshots: snapshots,
+            LimitDescriptors: registry.LimitDescriptorsByProvider,
+            Errors: errors);
 
-        var json = JsonSerializer.Serialize(requestedToken is not null && payload.Count == 1 ? payload.Values.First() : payload, OutputJsonOptions);
+        var path = requestedToken is not null ? $"/v1/limits/{requestedToken}" : "/v1/limits";
+        var response = LocalUsageApi.Respond("GET", path, state);
+        var json = response.Body is { } body ? System.Text.Encoding.UTF8.GetString(body) : "{}";
         return new UsageReadResult(json, warnings);
     }
 }

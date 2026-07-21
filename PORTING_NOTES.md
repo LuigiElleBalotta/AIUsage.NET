@@ -350,12 +350,43 @@ senza più l'eccezione di concorrenza, per tutti e 10 i provider (2 riusciti con
 Claude e Codex — 8 falliti con messaggi di errore leggibili per mancanza di credenziali —
 comportamento atteso su questa macchina di test).
 
-## Servizi locali non ancora iniziati
+## Local HTTP API (`Services/LocalUsageApi.cs`, `LocalLimitsApi.cs`, `LocalUsageServer.cs`) — **fatto**
 
-`[OMESSO]` I servizi `LocalUsageServer`/`LocalLimitsAPI`/`LocalUsageAPI` (il local HTTP API su
-:6736, che CLI e altre app locali potrebbero consumare) non sono ancora stati progettati per
-Windows. La CLI attuale bypassa il problema leggendo/scrivendo direttamente la cache condivisa
-(vedi sopra) invece di passare per un server HTTP locale.
+`[FEDELE]` Porta 1:1 la logica pura di routing/encoding dell'originale (`LocalUsageAPI.swift`,
+`LocalLimitsAPI.swift`): `LocalUsageApi.Respond(method, path, state)` implementa `/v1/limits`,
+`/v1/limits/:id`, `/v1/usage`, `/v1/usage/:id`, `OPTIONS` (204 + CORS), 404/405/503 con lo stesso
+corpo `{"error":"..."}`, e le stesse wire shape documentate in `docs/local-http-api.md` (`progress`/
+`text`/`badge`/`barChart` per `/v1/usage`, l'envelope `openusage.limits.v1` con `kind`/`unit`/`used`/
+`limit`/`remaining`/`utilization`/`resetsAt`/`windowSeconds`/`estimated` per `/v1/limits`).
+`LocalLimitsApi.Encode` seleziona solo le risorse esplicitamente dichiarate via `ExportingLimit` sui
+`WidgetDescriptors` di ogni provider (già tutti portati fedelmente — Claude, Codex, Cursor, ecc.
+avevano già `.ExportingLimit(...)` scritto, semplicemente non ancora consumato da nessun edge).
+
+`[DIVERGENTE]` Il vero listener di rete (`LocalUsageServer.cs`) usa `System.Net.Sockets.TcpListener`
+su loopback (`127.0.0.1:6736`) invece di `Network.framework` — stesso comportamento (si disabilita
+silenziosamente in log se la porta è occupata, max 16 connessioni concorrenti con `503` altrimenti,
+parsing tollerante della prima riga della richiesta). **Bug fix trovato testando dal vivo**: la
+prima versione recuperava lo `NetworkStream` due volte (`client.GetStream()` sia nella lettura
+dell'head sia nell'invio della risposta), col primo avvolto in un `using` che chiudeva il socket
+sottostante prima ancora di scrivere la risposta — ogni richiesta reale falliva con "connessione
+chiusa in modo imprevisto" nonostante il routing/encoding fossero corretti. Corretto recuperando lo
+stream una sola volta per l'intera connessione e passandolo sia alla lettura che alla scrittura.
+
+`[FEDELE]` `Services/UsageReader.cs` (usato dalla CLI) ora instrada la risposta attraverso
+`LocalUsageApi.Respond("GET", "/v1/limits[/:id]", state)` esattamente come fa l'originale
+`UsageReader.swift` — CLI e API locale producono ora lo **stesso identico JSON** per lo stesso
+provider, invece del dump ad-hoc precedente. Verificato manualmente con credenziali reali: `aiusage
+claude` produce l'envelope `openusage.limits.v1` corretto; l'app tray con `--show` avvia il server
+(log `[localapi] listening on 127.0.0.1:6736`) e risponde correttamente a `/v1/limits`, `/v1/usage`,
+una route ignota (404), e `OPTIONS` (204 + CORS) via richieste HTTP reali da PowerShell.
+
+`[OMESSO — resta]` `/v1/limits/:id` e `/v1/usage/:id` fanno matching solo per ID esatto di provider
+(nessun concetto di "family ID" che nomina più account della stessa famiglia) — corretto per ora
+dato che il multi-account Claude non è ancora portato; da estendere se/quando lo sarà.
+Copertura test: `tests/AIUsage.Core.Tests/Services/LocalUsageApiTests.cs` (routing per tutte le
+route/metodi, ogni tipo di `MetricLine` serializzato correttamente),
+`tests/AIUsage.Core.Tests/Services/LocalLimitsApiTests.cs` (risorse progress/value, stale flag,
+provider/risorsa mancante omessi, errori in coda).
 
 `[OMESSO]` **iCloud Sync**: nessun equivalente Windows deciso ancora (OneDrive? File locale +
 nessun sync multi-macchina per ora?). Da discutere.
@@ -472,8 +503,8 @@ concetti specifici dell'ecosistema Apple).
 1. ~~Test unitari sui mapper di ogni provider~~ — **fatto**, vedi sezione sopra (235 test verdi).
 2. ~~Log rotation in `AppLog.cs`~~ — **fatto**, vedi `Support/LogFile.cs` sopra.
 3. ~~Icona `.ico` multi-risoluzione reale per tray/exe~~ — **fatto**, vedi sezione UI WPF sopra.
-4. `LocalUsageServer`/`LocalUsageAPI` (API HTTP locale su `127.0.0.1:6736`) — da fare; migrare
-   `UsageReader` della CLI per passare di lì, per parità di schema con l'originale.
+4. ~~`LocalUsageServer`/`LocalUsageAPI` (API HTTP locale su `127.0.0.1:6736`)~~ — **fatto**, vedi
+   sezione "Local HTTP API" sopra; `UsageReader` della CLI condivide ora lo stesso encoder.
 5. Customize UI per-metrica (toggle di singole metriche, non solo provider interi) in
    `SettingsWindow` o una nuova finestra, appoggiata su `LayoutStore.SetMetricEnabled` — da fare.
 6. Grafici per `MetricLine.Chart` (Usage Trend) in `MetricsWindow.xaml.cs` — da fare.
