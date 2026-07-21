@@ -26,6 +26,7 @@ public partial class MetricsWindow : Window
     {
         _container = container;
         InitializeComponent();
+        VersionText.Text = $"v{AppVersion.Display()}";
     }
 
     public void Refresh()

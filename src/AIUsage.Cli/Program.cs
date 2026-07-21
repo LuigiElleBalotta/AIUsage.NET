@@ -23,8 +23,7 @@ try
 
     if (arguments.ShowVersion)
     {
-        var version = typeof(Program).Assembly.GetName().Version;
-        Console.WriteLine(version is not null ? $"aiusage {version.ToString(3)}" : "aiusage (development build)");
+        Console.WriteLine($"aiusage {CliVersion.Display()}");
         return 0;
     }
 

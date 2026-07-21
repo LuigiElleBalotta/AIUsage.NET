@@ -30,8 +30,12 @@
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <TextBlock Text="AIUsage" FontSize="15" FontWeight="Bold"
-                           Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center" />
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="AIUsage" FontSize="15" FontWeight="Bold"
+                               Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center" />
+                    <TextBlock x:Name="VersionText" FontSize="11" Margin="6,2,0,0"
+                               Foreground="{StaticResource TextTertiaryBrush}" VerticalAlignment="Center" />
+                </StackPanel>
                 <StackPanel Grid.Column="1" Orientation="Horizontal">
                     <Button x:Name="RefreshChromeButton" Style="{StaticResource ChromeButtonStyle}"
                             Click="RefreshButton_Click" ToolTip="Refresh now">

@@ -1,0 +1,12 @@
+<Project>
+  <!--
+    Shared version stamp for every project in the solution. Bump this alongside each git tag
+    (e.g. `git tag v0.1.0`) so a locally built AIUsage.exe/aiusage.exe reports the same version as
+    the corresponding GitHub Release. script/release.ps1 overrides this with -p:Version=<tag> during
+    a tagged CI build, so the release artifact's version always matches its tag even if this file is
+    momentarily out of sync.
+  -->
+  <PropertyGroup>
+    <Version>0.1.1</Version>
+  </PropertyGroup>
+</Project>

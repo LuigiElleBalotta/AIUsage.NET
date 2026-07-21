@@ -377,6 +377,21 @@ Gli script macOS-only dell'originale (`compile_icon.sh`, `embed_sparkle.sh`,
 non hanno controparte: sono legati a concetti Apple-specifici (Icon Composer, Sparkle framework
 embedding, iCloud provisioning profiles) che non esistono nel port Windows.
 
+`[NUOVO]` `Directory.Build.props` alla radice della solution centralizza il `<Version>` per tutti i
+progetti (letto da `AIUsage.Tray/AppVersion.cs` e `AIUsage.Cli/CliVersion.cs` per mostrare la
+versione nella title bar della finestra, nella finestra Settings, e in `aiusage --version`).
+`script/release.ps1` passa `-p:Version=$Version` a `dotnet publish` così l'eseguibile pubblicato
+riporta sempre la stessa versione del tag git usato per la release, anche se `Directory.Build.props`
+non fosse stato aggiornato prima del tag.
+
+`[BUG FIX — collisione case-insensitive NTFS]` La prima versione di `release.ps1` copiava
+`AIUsage.exe` (tray) e `aiusage.exe` (CLI) nella stessa cartella per produrre uno zip "flat". NTFS su
+Windows è case-insensitive per default, quindi `AIUsage.exe` e `aiusage.exe` sono lo **stesso path**
+per il filesystem: il secondo `Copy-Item` sovrascriveva silenziosamente il primo, e lo zip risultante
+conteneva solo la CLI (o solo la tray app, a seconda dell'ordine), mai entrambi. Nessun errore
+visibile — bisognava aprire lo zip per notare che ne mancava uno. Corretto tenendo la CLI nella sua
+sottocartella `cli/` invece di appiattire tutto in una singola directory.
+
 ## Documentazione (`docs/`)
 
 `[OMESSO]` Non ancora copiata/adattata. Piano: creare `openusageWindows/docs/` con gli stessi file,

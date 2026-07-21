@@ -35,25 +35,30 @@ New-Item -ItemType Directory -Path $StageDir | Out-Null
 $trayProject = Join-Path $RootDir "src\AIUsage.Tray\AIUsage.Tray.csproj"
 $cliProject = Join-Path $RootDir "src\AIUsage.Cli\AIUsage.Cli.csproj"
 
-Write-Host "==> publishing tray app ($Runtime, self-contained, single-file)"
+Write-Host "==> publishing tray app ($Runtime, self-contained, single-file, version $Version)"
 dotnet publish $trayProject -c Release -r $Runtime --self-contained true `
-    -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
+    -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:Version=$Version `
     -o (Join-Path $StageDir "tray")
 if ($LASTEXITCODE -ne 0) { throw "Tray publish failed." }
 
-Write-Host "==> publishing CLI ($Runtime, self-contained, single-file)"
+Write-Host "==> publishing CLI ($Runtime, self-contained, single-file, version $Version)"
 dotnet publish $cliProject -c Release -r $Runtime --self-contained true `
-    -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
+    -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:Version=$Version `
     -o (Join-Path $StageDir "cli")
 if ($LASTEXITCODE -ne 0) { throw "CLI publish failed." }
 
-# Flatten into one folder: AIUsage.exe (tray) + aiusage.exe (CLI) side by side, mirroring how the
-# Swift release puts the app bundle's helper CLI under Contents/Helpers next to the main binary.
-Write-Host "==> staging flat release folder"
+# AIUsage.exe (tray) at the stage root + aiusage.exe (CLI) kept in its own "cli" subfolder, mirroring
+# how the Swift release puts the app bundle's helper CLI under Contents/Helpers next to the main
+# binary. Deliberately NOT flattened into one folder: "AIUsage.exe" and "aiusage.exe" differ only by
+# case, and Windows' default NTFS case-insensitive lookup treats them as the SAME path — copying both
+# into one directory silently overwrites the first with the second (this bit a first pass at this
+# script). Keeping the CLI in its own subfolder sidesteps that collision entirely.
+Write-Host "==> staging release folder"
 Copy-Item (Join-Path $StageDir "tray\AIUsage.exe") $StageDir
-Copy-Item (Join-Path $StageDir "cli\aiusage.exe") $StageDir
 Remove-Item -Recurse -Force (Join-Path $StageDir "tray")
-Remove-Item -Recurse -Force (Join-Path $StageDir "cli")
+# The CLI's own pdb/Resources copy also stays in cli\ - only its own process needs them, and keeping
+# them there (rather than merging into the stage root) avoids the tray's Resources being shadowed by
+# a second copy with the exact same relative path.
 
 $zipPath = Join-Path $DistDir "AIUsage-$Version-$Runtime.zip"
 if (Test-Path $zipPath) { Remove-Item $zipPath }
@@ -62,4 +67,4 @@ Compress-Archive -Path (Join-Path $StageDir "*") -DestinationPath $zipPath
 
 Write-Host "==> done"
 Write-Host "    Zip: $zipPath"
-Write-Host "    NOTE: unsigned build. Code signing (signtool) is not yet wired up — see PORTING_NOTES.md."
+Write-Host "    NOTE: unsigned build. Code signing (signtool) is not yet wired up - see PORTING_NOTES.md."

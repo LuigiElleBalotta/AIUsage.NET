@@ -1,4 +1,3 @@
-using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -23,14 +22,8 @@ public partial class SettingsWindow : Window
     {
         _container = container;
         InitializeComponent();
-        VersionText.Text = $"AIUsage.NET {VersionString()}";
+        VersionText.Text = $"AIUsage.NET v{AppVersion.Display()}";
         BuildProviderToggles();
-    }
-
-    private static string VersionString()
-    {
-        var version = Assembly.GetExecutingAssembly().GetName().Version;
-        return version is null ? "(dev build)" : version.ToString(3);
     }
 
     private void BuildProviderToggles()
