@@ -4,6 +4,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using AIUsage.Core.App;
 using AIUsage.Core.Models;
+using AIUsage.Core.Support;
 using AIUsage.Tray.Theme;
 using Brush = System.Windows.Media.Brush;
 using Brushes = System.Windows.Media.Brushes;
@@ -177,7 +178,14 @@ public partial class MetricsWindow : Window
 
         headerLine.Children.Add(title);
         headerLine.Children.Add(headline);
+        if (data.HasModelBreakdown) headerLine.ToolTip = BuildModelBreakdownTooltip(data);
         row.Children.Add(headerLine);
+
+        if (data.IsChart)
+        {
+            row.Children.Add(BuildChart(data));
+            return row;
+        }
 
         if (data.IsBounded)
         {
@@ -198,6 +206,65 @@ public partial class MetricsWindow : Window
         }
 
         return row;
+    }
+
+    /// <summary>Renders MetricLine.Chart ("Usage Trend") as a small bar chart: one thin bar per day,
+    /// height proportional to that day's value against the series max, with a hover tooltip showing
+    /// the pre-formatted readout and axis label. No equivalent yet of the original's smooth area
+    /// chart with axis gridlines — this is a lightweight bar-chart approximation.</summary>
+    private static UIElement BuildChart(WidgetData data)
+    {
+        const double chartHeight = 44;
+        var panel = new StackPanel { Margin = new Thickness(0, 6, 0, 0) };
+
+        if (data.ChartPoints.Count == 0)
+        {
+            panel.Children.Add(new TextBlock
+            {
+                Text = "No usage data yet",
+                Foreground = (Brush)Application.Current.Resources["TextTertiaryBrush"],
+                FontSize = 11
+            });
+            return panel;
+        }
+
+        var maxValue = Math.Max(1, data.ChartPoints.Max(p => p.Value));
+        var barsHost = new Grid { Height = chartHeight };
+        var bars = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Bottom };
+
+        foreach (var point in data.ChartPoints)
+        {
+            var fraction = Math.Clamp(point.Value / maxValue, 0, 1);
+            var bar = new Rectangle
+            {
+                Width = 5,
+                Height = Math.Max(2, fraction * chartHeight),
+                RadiusX = 1.5,
+                RadiusY = 1.5,
+                Fill = (Brush)Application.Current.Resources["AccentBrush"],
+                Margin = new Thickness(1, 0, 1, 0),
+                VerticalAlignment = VerticalAlignment.Bottom,
+                ToolTip = $"{point.Label}: {point.Readout}"
+            };
+            bars.Children.Add(bar);
+        }
+
+        barsHost.Children.Add(bars);
+        panel.Children.Add(barsHost);
+
+        if (!string.IsNullOrEmpty(data.ChartNote))
+        {
+            panel.Children.Add(new TextBlock
+            {
+                Text = data.ChartNote,
+                Foreground = (Brush)Application.Current.Resources["TextTertiaryBrush"],
+                FontSize = 10.5,
+                Margin = new Thickness(0, 4, 0, 0),
+                TextWrapping = TextWrapping.Wrap
+            });
+        }
+
+        return panel;
     }
 
     private static UIElement BuildProgressBar(WidgetData data)
@@ -230,6 +297,54 @@ public partial class MetricsWindow : Window
         track.Children.Add(fill);
 
         return track;
+    }
+
+    /// <summary>Builds a hover tooltip listing per-model token/cost breakdown for a period-scoped
+    /// spend row (Today / Yesterday / Last 30 Days). No equivalent yet of the original's rich
+    /// ModelUsageDetail popover view (per-model rows with icons, sorting affordances) — this is a
+    /// plain-text WPF ToolTip showing the same underlying data (ModelUsageBreakdown), attached
+    /// directly to the row's header line whenever HasModelBreakdown is true.</summary>
+    private static object BuildModelBreakdownTooltip(WidgetData data)
+    {
+        var breakdown = data.ModelBreakdown!;
+        var panel = new StackPanel { MaxWidth = 260 };
+        panel.Children.Add(new TextBlock
+        {
+            Text = "Model breakdown",
+            FontWeight = FontWeights.Bold,
+            FontSize = 12,
+            Margin = new Thickness(0, 0, 0, 4)
+        });
+
+        foreach (var model in breakdown.Models)
+        {
+            var line = new TextBlock { FontSize = 11.5, Margin = new Thickness(0, 1, 0, 1) };
+            var costText = model.CostUSD is { } cost ? $" — {Formatters.Currency(cost, 2)}" : "";
+            line.Text = $"{model.Model}: {model.TotalTokens:N0} tokens{costText}";
+            panel.Children.Add(line);
+        }
+
+        if (breakdown.TotalCostUSD is { } totalCost)
+        {
+            panel.Children.Add(new TextBlock
+            {
+                Text = $"Total: {breakdown.TotalTokens:N0} tokens — {Formatters.Currency(totalCost, 2)}",
+                FontWeight = FontWeights.SemiBold,
+                FontSize = 11.5,
+                Margin = new Thickness(0, 4, 0, 0)
+            });
+        }
+
+        panel.Children.Add(new TextBlock
+        {
+            Text = breakdown.SourceNote,
+            Foreground = Brushes.Gray,
+            FontSize = 10.5,
+            Margin = new Thickness(0, 4, 0, 0),
+            TextWrapping = TextWrapping.Wrap
+        });
+
+        return panel;
     }
 
     private static Brush SeverityBrush(WidgetData data)

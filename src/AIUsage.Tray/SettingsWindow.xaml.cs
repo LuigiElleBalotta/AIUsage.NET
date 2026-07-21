@@ -24,6 +24,7 @@ public partial class SettingsWindow : Window
         InitializeComponent();
         VersionText.Text = $"AIUsage.NET v{AppVersion.Display()}";
         BuildProviderToggles();
+        BuildMetricToggles();
     }
 
     private void BuildProviderToggles()
@@ -79,6 +80,69 @@ public partial class SettingsWindow : Window
 
         grid.Children.Add(badge);
         grid.Children.Add(title);
+        grid.Children.Add(toggle);
+        return grid;
+    }
+
+    /// <summary>Per-metric Customize list: one toggle per WidgetDescriptor, grouped under a small
+    /// provider header, backed directly by LayoutStore.SetMetricEnabled/IsPinned's underlying
+    /// membership test (whether the descriptor is currently in Placed). Unlike the provider on/off
+    /// toggles above (which gate whether a provider refreshes at all), this only controls whether an
+    /// individual metric tile is shown on the dashboard for providers that are enabled.</summary>
+    private void BuildMetricToggles()
+    {
+        MetricTogglesList.Children.Clear();
+        var providers = _container.Registry.Providers;
+        var placedIds = new HashSet<string>(_container.Layout.Placed.Select(w => w.DescriptorId));
+
+        for (var i = 0; i < providers.Count; i++)
+        {
+            var provider = providers[i];
+            var descriptors = _container.Registry.DescriptorsFor(provider.Id);
+            if (descriptors.Count == 0) continue;
+
+            MetricTogglesList.Children.Add(new TextBlock
+            {
+                Text = provider.DisplayName,
+                FontSize = 11,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = (Brush)Application.Current.Resources["TextSecondaryBrush"],
+                Margin = new Thickness(10, i == 0 ? 8 : 14, 10, 4)
+            });
+
+            foreach (var descriptor in descriptors)
+            {
+                MetricTogglesList.Children.Add(BuildMetricRow(descriptor.Id, descriptor.Title, placedIds.Contains(descriptor.Id)));
+            }
+        }
+    }
+
+    private UIElement BuildMetricRow(string descriptorId, string title, bool isEnabled)
+    {
+        var grid = new Grid { Margin = new Thickness(10, 6, 10, 6) };
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+        var label = new TextBlock
+        {
+            Text = title,
+            Foreground = (Brush)Application.Current.Resources["TextPrimaryBrush"],
+            FontSize = 12.5,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        Grid.SetColumn(label, 0);
+
+        var toggle = new CheckBox
+        {
+            Style = (Style)Application.Current.Resources["ToggleSwitchStyle"],
+            IsChecked = isEnabled,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        toggle.Checked += (_, _) => _container.Layout.SetMetricEnabled(descriptorId, true);
+        toggle.Unchecked += (_, _) => _container.Layout.SetMetricEnabled(descriptorId, false);
+        Grid.SetColumn(toggle, 1);
+
+        grid.Children.Add(label);
         grid.Children.Add(toggle);
         return grid;
     }

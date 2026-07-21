@@ -308,9 +308,16 @@ dall'utente), riconsiderare una libreria come SharpVectors.Wpf.
 nemmeno un placeholder utile: era un semplice `MessageBox`). Mostra l'elenco dei 10 provider con
 badge icona, nome, e un toggle collegato direttamente a
 `AppContainer.Enablement.SetEnabled/IsEnabled` (`ProviderEnablementStore`, già portato fedelmente).
-`[OMESSO]` Nessun controllo a livello di singola metrica, nessun drag-reorder, nessun pin — la
-Customize screen completa dell'originale (vedi `docs/adding-a-provider.md` e `docs/dashboard.md`)
-resta lavoro futuro; questa è solo la fetta "providers on/off" collegata allo store reale.
+
+`[FEDELE — Customize per-metrica]` Aggiunta una seconda sezione "CUSTOMIZE METRICS" nella stessa
+`SettingsWindow`: un toggle per ogni `WidgetDescriptor` di ogni provider (non solo l'intero
+provider), raggruppati sotto un header col nome del provider, collegato direttamente a
+`LayoutStore.SetMetricEnabled` (già portato fedelmente — la membership in `Placed` era già la fonte
+di verità, semplicemente non ancora esposta da nessuna UI). Disattivare una singola metrica la
+rimuove dalla dashboard senza toccare l'abilitazione dell'intero provider.
+`[OMESSO — resta]` Nessun drag-reorder, nessun pin, nessuna vista "Customize" a schermo intero
+separata — tutto vive in una sezione scrollabile della stessa finestra Settings, più semplice della
+Customize screen originale ma con la stessa funzionalità di base (mostra/nascondi singole metriche).
 
 `[BUG FIX — race condition]` `WidgetDataStore.RefreshAllAsync` lancia un task `RefreshAsync` per
 ogni provider in parallelo (`Task.WhenAll`), ma `Snapshots`, `ProviderErrors`, e
@@ -336,11 +343,27 @@ continua a caricarla a runtime per l'icona nella tray (il fallback al placeholde
 mano resta solo per il caso in cui il file manchi). Design deliberatamente semplice (non un vero
 logo definitivo) — da rivalutare se in futuro viene fornito un asset grafico professionale.
 
-`[OMESSO — resta]` Nessun grafico per `MetricLine.Chart` (Usage Trend), nessun breakdown modelli al
-hover, nessun drag-reorder, nessuna vera animazione di apertura/altezza, nessuna vibrancy/
-transparency opzionale. La UI è più vicina all'originale di quanto non fosse (vera barra di
-progresso, vero tema scuro, vere icone brand, vera finestra Settings) ma è ancora una versione
-sostanzialmente più semplice del `DashboardView` SwiftUI completo.
+`[FEDELE — nuovo, grafici]` `MetricsWindow.BuildChart` rende ora le righe `MetricLine.Chart` (Usage
+Trend): un bar-chart leggero, una barra sottile per giorno, altezza proporzionale al massimo della
+serie, con un tooltip nativo per barra che mostra `MetricChartPoint.Readout` (lo stesso testo
+pre-formattato usato altrove, es. "38.1M tokens") e la nota fonte (`ChartNote`) sotto al grafico.
+`[SEMPLIFICATO]` Non è un'area chart con assi/gridline come l'originale SwiftUI — è
+un'approssimazione a barre, scelta deliberatamente per evitare di scrivere un motore di plotting
+completo per un solo tipo di riga; il dato sottostante (30 giorni di storico) è identico.
+
+`[FEDELE — nuovo, model breakdown]` Le righe di spesa periodiche (Today/Yesterday/Last 30 Days) con
+`WidgetData.HasModelBreakdown == true` ora mostrano un tooltip nativo WPF al passaggio del mouse
+sulla riga, con la lista modelli→token/costo di `ModelUsageBreakdown` (già portato fedelmente in
+`SpendTileMapper`, semplicemente non ancora consumato da nessuna UI) più un totale e la source
+note. `[SEMPLIFICATO]` È un `ToolTip` di testo semplice, non il popover `ModelUsageDetail` ricco
+dell'originale (righe con icone, ordinamento) — stessi dati, presentazione più essenziale.
+
+`[OMESSO — resta]` Nessun drag-reorder, nessun pin dalla UI (il modello dati esiste già in
+`LayoutStore` — `IsPinned`/`SetPinned`/`CanPin` — ma nessuna superficie WPF lo espone ancora),
+nessuna vera animazione di apertura/altezza, nessuna vibrancy/transparency opzionale. La UI è ormai
+molto più vicina all'originale (barre di progresso, tema scuro, icone brand, Settings funzionante
+con toggle provider *e* metrica, grafici Usage Trend, hover breakdown modelli) ma resta una versione
+più semplice del `DashboardView` SwiftUI completo su questi ultimi dettagli di interazione.
 
 Verificato manualmente: l'app si avvia, l'icona compare nella tray, il click sinistro apre/chiude la
 finestra metriche con il nuovo tema, "Refresh Now" e "Quit" funzionano, la finestra Settings si apre
@@ -505,16 +528,25 @@ concetti specifici dell'ecosistema Apple).
 3. ~~Icona `.ico` multi-risoluzione reale per tray/exe~~ — **fatto**, vedi sezione UI WPF sopra.
 4. ~~`LocalUsageServer`/`LocalUsageAPI` (API HTTP locale su `127.0.0.1:6736`)~~ — **fatto**, vedi
    sezione "Local HTTP API" sopra; `UsageReader` della CLI condivide ora lo stesso encoder.
-5. Customize UI per-metrica (toggle di singole metriche, non solo provider interi) in
-   `SettingsWindow` o una nuova finestra, appoggiata su `LayoutStore.SetMetricEnabled` — da fare.
-6. Grafici per `MetricLine.Chart` (Usage Trend) in `MetricsWindow.xaml.cs` — da fare.
-7. Popover di breakdown modelli al hover per le righe di spesa (Claude/Codex/Cursor/Grok) — da
-   fare.
+5. ~~Customize UI per-metrica~~ — **fatto**, sezione "CUSTOMIZE METRICS" in `SettingsWindow`.
+6. ~~Grafici per `MetricLine.Chart` (Usage Trend)~~ — **fatto**, `MetricsWindow.BuildChart`.
+7. ~~Popover di breakdown modelli al hover per le righe di spesa~~ — **fatto** (tooltip nativo,
+   vedi sezione UI WPF sopra).
 8. Script `.ps1`/`.bat` per build/run — **fatto** (`script/build_and_run.ps1`, `release.ps1`,
    `update_pricing_snapshots.ps1`).
-9. Multi-account Claude, quota-pace notifications, scorciatoia da tastiera globale — feature
-   `[OMESSO]` residue, non nello scope della "versione stabile e completa" decisa sopra; da
-   valutare solo se richieste esplicitamente in futuro.
+9. Multi-account Claude, quota-pace notifications, scorciatoia da tastiera globale, drag-reorder e
+   pin dalla UI — feature `[OMESSO]` residue, non nello scope della "versione stabile e completa"
+   decisa sopra; da valutare solo se richieste esplicitamente in futuro.
+
+## Riepilogo scope "versione stabile e completa" (decisione dell'utente, sessione corrente)
+
+Tutti i 6 elementi che l'agente aveva deciso di portare per raggiungere una "versione stabile e
+completa e funzionante" sono ora **fatti**: test automatici (235+ test), log rotation, icona reale,
+Local HTTP API, Customize per-metrica, grafici Usage Trend, e (bonus, stesso giro) model breakdown
+hover. La solution compila senza warning (`dotnet build AIUsage.sln`, 0 avvisi/0 errori) e l'intera
+suite di test passa (`dotnet test`). Resta da fare, se richiesto in futuro: multi-account Claude,
+iCloud Sync, quota-pace notifications, Sparkle/aggiornamenti, scorciatoia da tastiera globale,
+telemetria, drag-reorder/pin dalla UI — tutti deliberatamente fuori scope per questa sessione.
 
 ---
 *Aggiornare questo file ad ogni sessione di lavoro significativa, aggiungendo nuove voci o
