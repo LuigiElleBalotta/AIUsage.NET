@@ -10,6 +10,7 @@
     <LangVersion>latest</LangVersion>
     <RootNamespace>AIUsage.Tray</RootNamespace>
     <AssemblyName>AIUsage</AssemblyName>
+    <ApplicationIcon Condition="Exists('Resources\aiusage.ico')">Resources\aiusage.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>

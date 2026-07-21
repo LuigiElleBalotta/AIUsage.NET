@@ -9,6 +9,7 @@
     <RootNamespace>AIUsage.Cli</RootNamespace>
     <AssemblyName>aiusage</AssemblyName>
     <InvariantGlobalization>false</InvariantGlobalization>
+    <ApplicationIcon Condition="Exists('..\AIUsage.Tray\Resources\aiusage.ico')">..\AIUsage.Tray\Resources\aiusage.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>

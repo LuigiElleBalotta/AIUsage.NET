@@ -22,9 +22,9 @@ stesso nome. Di conseguenza:
 - Path di configurazione utente: `~/.openusage/config.json` → `~/.aiusage/config.json`;
   cache pricing locale: `%LOCALAPPDATA%\OpenUsage\pricing` → `%LOCALAPPDATA%\AIUsage\pricing`
 - Windows Credential Manager target prefix: `OpenUsage:` → `AIUsage:`
-- **Logo/icona**: non ancora cambiati (nessuna icona presente finora). Il branding grafico
-  (icona tray, `AppIcon`) andrà creato da zero più avanti — richiesto esplicitamente dall'utente
-  di non riusare quello originale.
+- **Logo/icona**: un'icona `.ico` reale generata proceduralmente (vedi sezione UI WPF più sotto,
+  `tools/IconGen/`) sostituisce ora il placeholder disegnato a runtime — non riusa nulla
+  dell'originale, coerente con la richiesta esplicita dell'utente.
 
 `[DIVERGENTE — deliberato]` **Il fetch live del pricing supplement resta puntato a
 `https://robinebers.github.io/openusage/pricing_supplement.json`** (in `ModelPricingStore.cs`).
@@ -325,10 +325,16 @@ mutazione di quei tre dizionari in un `lock (_mutationLock)`. Trovato durante il
 nuova UI (mai emerso prima perché la UI precedente non veniva rinfrescata abbastanza spesso da
 esporre la race in una singola sessione di test breve).
 
-`[OMESSO]` Nessuna icona `.ico` reale — `TrayIconFactory` disegna un placeholder circolare "AI" a
-runtime finché non viene disegnato un logo vero (deliberatamente rimandato, vedi sezione
-Rebranding). Se in futuro compare `Resources\aiusage.ico` nel progetto Tray, viene usato
-automaticamente al suo posto.
+`[FEDELE — nuovo]` **Icona `.ico` reale**: generata con un piccolo tool standalone
+(`tools/IconGen/`, non incluso in `AIUsage.sln`, vedi il suo `README.md`) che disegna il glifo
+brand (badge circolare con gradiente blu + wordmark "AI") alle risoluzioni standard Windows (16,
+20, 24, 32, 40, 48, 64, 128, 256px) e le impacchetta in un singolo `.ico` multi-risoluzione con
+frame compressi PNG. Salvata in `src/AIUsage.Tray/Resources/aiusage.ico`; `AIUsage.Tray.csproj` e
+`AIUsage.Cli.csproj` la referenziano entrambi via `ApplicationIcon` (quindi sia `AIUsage.exe` che
+`aiusage.exe` mostrano l'icona vera in Explorer/taskbar/Alt-Tab), e `TrayIconFactory.Create()`
+continua a caricarla a runtime per l'icona nella tray (il fallback al placeholder disegnato a
+mano resta solo per il caso in cui il file manchi). Design deliberatamente semplice (non un vero
+logo definitivo) — da rivalutare se in futuro viene fornito un asset grafico professionale.
 
 `[OMESSO — resta]` Nessun grafico per `MetricLine.Chart` (Usage Trend), nessun breakdown modelli al
 hover, nessun drag-reorder, nessuna vera animazione di apertura/altezza, nessuna vibrancy/
@@ -465,8 +471,7 @@ concetti specifici dell'ecosistema Apple).
 
 1. ~~Test unitari sui mapper di ogni provider~~ — **fatto**, vedi sezione sopra (235 test verdi).
 2. ~~Log rotation in `AppLog.cs`~~ — **fatto**, vedi `Support/LogFile.cs` sopra.
-3. Icona `.ico` multi-risoluzione reale per tray/exe (sostituisce il placeholder disegnato a
-   runtime in `TrayIconFactory.cs`) — da fare.
+3. ~~Icona `.ico` multi-risoluzione reale per tray/exe~~ — **fatto**, vedi sezione UI WPF sopra.
 4. `LocalUsageServer`/`LocalUsageAPI` (API HTTP locale su `127.0.0.1:6736`) — da fare; migrare
    `UsageReader` della CLI per passare di lì, per parità di schema con l'originale.
 5. Customize UI per-metrica (toggle di singole metriche, non solo provider interi) in
