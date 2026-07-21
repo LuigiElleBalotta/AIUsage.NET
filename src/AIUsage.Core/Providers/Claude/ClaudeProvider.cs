@@ -8,6 +8,7 @@ public sealed class ClaudeProvider : IProviderRuntime
 {
     public Provider Provider { get; }
     public ClaudeAuthStore AuthStore { get; }
+    public ClaudeDesktopAuthStore DesktopAuthStore { get; }
     public ClaudeUsageClient UsageClient { get; }
     public ClaudeLogUsageScanner LogUsageScanner { get; }
     private readonly Func<DateTimeOffset> _now;
@@ -21,6 +22,7 @@ public sealed class ClaudeProvider : IProviderRuntime
     public ClaudeProvider(
         Provider? provider = null,
         ClaudeAuthStore? authStore = null,
+        ClaudeDesktopAuthStore? desktopAuthStore = null,
         ClaudeUsageClient? usageClient = null,
         ClaudeLogUsageScanner? logUsageScanner = null,
         Func<DateTimeOffset>? now = null,
@@ -28,6 +30,7 @@ public sealed class ClaudeProvider : IProviderRuntime
     {
         Provider = provider ?? MakeProvider();
         AuthStore = authStore ?? new ClaudeAuthStore();
+        DesktopAuthStore = desktopAuthStore ?? new ClaudeDesktopAuthStore();
         UsageClient = usageClient ?? new ClaudeUsageClient();
         LogUsageScanner = logUsageScanner ?? new ClaudeLogUsageScanner();
         _now = now ?? (() => DateTimeOffset.UtcNow);
@@ -63,7 +66,10 @@ public sealed class ClaudeProvider : IProviderRuntime
         return await Task.Run(() =>
         {
             var candidates = AuthStore.LoadCredentialCandidates();
-            return candidates.Any(c => c.HasUsableAccessToken);
+            if (candidates.Any(c => c.HasUsableAccessToken)) return true;
+            // No Claude Code CLI credentials found — a Claude Desktop install with cached OAuth
+            // material still counts as "usable locally" for first-run provider detection.
+            return DesktopAuthStore.HasCredentialMaterial();
         }, cancellationToken).ConfigureAwait(false);
     }
 
@@ -71,6 +77,18 @@ public sealed class ClaudeProvider : IProviderRuntime
     {
         var storedCandidates = await Task.Run(() => AuthStore.LoadCredentialCandidates(), cancellationToken).ConfigureAwait(false);
         var candidates = storedCandidates.Where(c => c.HasUsableAccessToken).ToList();
+
+        if (candidates.Count == 0)
+        {
+            // Claude Code's own CLI credentials (file/Credential Manager) weren't found — fall back to
+            // borrowing a currently-valid access token from a local Claude Desktop install, if any.
+            var desktopState = await Task.Run(() => DesktopAuthStore.Load(), cancellationToken).ConfigureAwait(false);
+            if (desktopState is not null)
+            {
+                AppLog.Info(LogTag.AuthFor("claude"), "no Claude Code credentials found; using Claude Desktop fallback");
+                candidates.Add(desktopState);
+            }
+        }
 
         if (candidates.Count == 0)
         {
