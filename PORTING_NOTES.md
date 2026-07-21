@@ -56,8 +56,9 @@ Convenzione: ogni voce ha un tag di stato:
   - `OpenUsage.Core` ≈ `Sources/OpenUsage` (libreria condivisa: modelli, provider, pricing, servizi)
   - `OpenUsage.Tray` ≈ `Sources/OpenUsageApp` (eseguibile GUI, WPF)
   - `OpenUsage.Cli` ≈ `Sources/OpenUsageCLI` (eseguibile CLI `openusage`)
-- `[OMESSO]` Nessun progetto di test ancora creato (l'originale ha `Tests/OpenUsageTests` e
-  `Tests/OpenUsageCLITests` con ~140 file). Da fare: `OpenUsage.Core.Tests` con xUnit.
+- ~~`[OMESSO]` Nessun progetto di test ancora creato~~ — **fatto** in una sessione successiva:
+  `tests/AIUsage.Core.Tests` con xUnit, 255 test (mapper di tutti i 10 provider + helper di
+  supporto). Vedi la sezione "Test automatici" più sotto per il dettaglio.
 
 ## Credenziali: mapping macOS → Windows
 
