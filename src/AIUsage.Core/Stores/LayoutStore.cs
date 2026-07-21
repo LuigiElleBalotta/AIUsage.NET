@@ -193,6 +193,82 @@ public sealed class LayoutStore
 
     public List<string> OrderedProviderIds() => Registry.OrderedProviderIds(ProviderOrder);
 
+    // MARK: - Drag-reorder (direct port of LayoutStore+Customization.swift, simplified: no
+    // always-shown/on-demand divider section since the WPF dashboard has no expand-caret equivalent
+    // yet — every visible metric lives in one flat per-provider order).
+
+    /// <summary>Reorder whole providers when <paramref name="dragged"/>'s header is dropped onto
+    /// <paramref name="target"/>'s. Works on the currently enabled provider order; disabled providers
+    /// keep their relative position. Returns whether the order actually changed.</summary>
+    public bool ReorderProvider(string dragged, string target)
+    {
+        var shown = OrderedProviderIds().Where(_isProviderEnabled).ToList();
+        var next = Reordered(shown, dragged, target);
+        if (next is null) return false;
+
+        // Reorder only the visible slots in the raw persisted sequence. Disabled providers keep their
+        // exact positions while the visible ids move around them.
+        var shownSet = new HashSet<string>(shown);
+        var replacements = new Queue<string>(next);
+        var rebuilt = new List<string>();
+        foreach (var providerId in ProviderOrder)
+        {
+            if (shownSet.Contains(providerId))
+            {
+                if (replacements.Count > 0) rebuilt.Add(replacements.Dequeue());
+            }
+            else
+            {
+                rebuilt.Add(providerId);
+            }
+        }
+        while (replacements.Count > 0) rebuilt.Add(replacements.Dequeue());
+        foreach (var providerId in OrderedProviderIds().Where(id => !rebuilt.Contains(id))) rebuilt.Add(providerId);
+
+        ProviderOrder = rebuilt;
+        PersistProviderOrder();
+        SyncPlacedOrder();
+        return true;
+    }
+
+    /// <summary>Reorder metrics within one provider when <paramref name="dragged"/> is dropped onto
+    /// <paramref name="target"/> (both descriptor ids of that provider). Operates on the provider's
+    /// full metric order so disabled metrics keep their place too. Returns whether anything actually
+    /// changed.</summary>
+    public bool ReorderMetric(string dragged, string target, string providerId)
+    {
+        if (dragged == target) return false;
+        var ordered = MetricOrder(providerId);
+        if (!ordered.Contains(dragged) || !ordered.Contains(target)) return false;
+
+        var next = Reordered(ordered, dragged, target);
+        if (next is null) return false;
+
+        MetricOrderByProvider[providerId] = next;
+        PersistMetricOrder();
+        SyncPlacedOrder();
+        return true;
+    }
+
+    /// <summary>Pure reorder: remove <paramref name="dragged"/>, reinsert it adjacent to
+    /// <paramref name="target"/> (after it when moving down, before it when moving up). Returns null
+    /// when either id is missing or they're identical.</summary>
+    public static List<string>? Reordered(List<string> ids, string dragged, string target)
+    {
+        if (dragged == target) return null;
+        var from = ids.IndexOf(dragged);
+        var to = ids.IndexOf(target);
+        if (from < 0 || to < 0) return null;
+
+        var next = new List<string>(ids);
+        next.RemoveAt(from);
+        var adjusted = next.IndexOf(target);
+        if (adjusted < 0) return null;
+        var insert = from < to ? adjusted + 1 : adjusted;
+        next.Insert(Math.Min(insert, next.Count), dragged);
+        return next;
+    }
+
     /// <summary>Every currently visible (enabled provider) placed widget, in display order.</summary>
     public List<PlacedWidget> VisiblePlaced => Placed.Where(w => Registry.Descriptor(w.DescriptorId) is { } d && _isProviderEnabled(d.ProviderId)).ToList();
 

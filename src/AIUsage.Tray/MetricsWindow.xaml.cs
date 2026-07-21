@@ -9,6 +9,10 @@ using AIUsage.Tray.Theme;
 using Brush = System.Windows.Media.Brush;
 using Brushes = System.Windows.Media.Brushes;
 using Rectangle = System.Windows.Shapes.Rectangle;
+using Point = System.Windows.Point;
+using MouseEventArgs = System.Windows.Input.MouseEventArgs;
+using DragDropEffects = System.Windows.DragDropEffects;
+using DataObject = System.Windows.DataObject;
 
 namespace AIUsage.Tray;
 
@@ -62,15 +66,134 @@ public partial class MetricsWindow : Window
                 var provider = _container.Registry.Provider(descriptor.ProviderId);
                 var snapshot = _container.DataStore.Snapshots.GetValueOrDefault(descriptor.ProviderId);
                 var (cardRoot, cardBody) = BuildProviderCard(provider?.DisplayName ?? descriptor.ProviderId, descriptor.ProviderId, snapshot?.Plan);
+                AttachProviderDragReorder(cardRoot, descriptor.ProviderId);
                 ProviderList.Children.Add(cardRoot);
                 currentCardBody = cardBody;
             }
 
             var data = _container.DataStore.Data(descriptor);
-            currentCardBody?.Children.Add(BuildRow(data));
+            var isPinned = _container.Layout.IsPinned(descriptor.Id);
+            var row = BuildRow(data, isPinned);
+            AttachMetricDragReorder(row, descriptor.ProviderId, descriptor.Id);
+            AttachRowContextMenu(row, descriptor);
+            currentCardBody?.Children.Add(row);
         }
 
         UpdateFooterStatus();
+    }
+
+    // MARK: - Drag-reorder (WPF native drag/drop, direct behavioral port of the Swift dashboard's
+    // drag-to-reorder: drag a provider's whole header to reorder providers, drag a metric row to
+    // reorder it within its provider. No lifted-preview ghost or spring animation like the SwiftUI
+    // original — WPF's DragDrop gives a plain drag cursor instead — but the underlying reorder model
+    // (LayoutStore.ReorderProvider/ReorderMetric) and drop-target behavior are the same.
+
+    private const string ProviderDragFormat = "AIUsage.ProviderDrag";
+    private const string MetricDragFormat = "AIUsage.MetricDrag";
+    private Point? _dragStart;
+
+    private void AttachProviderDragReorder(UIElement cardRoot, string providerId)
+    {
+        if (cardRoot is not Border card) return;
+        card.AllowDrop = true;
+
+        // The header (first child of the card's inner StackPanel) is the drag source, matching the
+        // Swift dashboard where dragging a provider's header line reorders whole providers.
+        if (card.Child is StackPanel { Children: [Grid header, ..] })
+        {
+            header.PreviewMouseLeftButtonDown += (_, e) => _dragStart = e.GetPosition(null);
+            header.PreviewMouseMove += (s, e) => TryStartDrag(s, e, header, ProviderDragFormat, providerId);
+        }
+
+        card.DragOver += (_, e) => e.Effects = e.Data.GetDataPresent(ProviderDragFormat) ? DragDropEffects.Move : DragDropEffects.None;
+        card.Drop += (_, e) =>
+        {
+            if (e.Data.GetData(ProviderDragFormat) is not string draggedId || draggedId == providerId) return;
+            if (_container.Layout.ReorderProvider(draggedId, providerId)) Refresh();
+        };
+    }
+
+    private void AttachMetricDragReorder(UIElement row, string providerId, string descriptorId)
+    {
+        if (row is not FrameworkElement element) return;
+        element.AllowDrop = true;
+
+        element.PreviewMouseLeftButtonDown += (_, e) => _dragStart = e.GetPosition(null);
+        element.PreviewMouseMove += (s, e) => TryStartDrag(s, e, element, MetricDragFormat, $"{providerId}\u0001{descriptorId}");
+
+        element.DragOver += (_, e) => e.Effects = e.Data.GetDataPresent(MetricDragFormat) ? DragDropEffects.Move : DragDropEffects.None;
+        element.Drop += (_, e) =>
+        {
+            if (e.Data.GetData(MetricDragFormat) is not string payload) return;
+            var parts = payload.Split('\u0001');
+            if (parts.Length != 2) return;
+            var (draggedProviderId, draggedDescriptorId) = (parts[0], parts[1]);
+            // Cross-provider drops are ignored: reordering only makes sense within one provider's card.
+            if (draggedProviderId != providerId || draggedDescriptorId == descriptorId) return;
+            if (_container.Layout.ReorderMetric(draggedDescriptorId, descriptorId, providerId)) Refresh();
+        };
+    }
+
+    private void TryStartDrag(object sender, MouseEventArgs e, UIElement source, string format, string payload)
+    {
+        if (e.LeftButton != MouseButtonState.Pressed || _dragStart is not { } start) return;
+        var current = e.GetPosition(null);
+        if (Math.Abs(current.X - start.X) < SystemParameters.MinimumHorizontalDragDistance &&
+            Math.Abs(current.Y - start.Y) < SystemParameters.MinimumVerticalDragDistance) return;
+
+        _dragStart = null;
+        var data = new DataObject(format, payload);
+        DragDrop.DoDragDrop(source, data, DragDropEffects.Move);
+    }
+
+    /// <summary>Right-click menu for a metric row: Hide (SetMetricEnabled false), Star/Unstar for the
+    /// menu bar (LayoutStore pin model, capped per provider), and Refresh this provider — the same
+    /// three actions the Swift dashboard's row context menu offers (minus Rename/Customize, which have
+    /// no WPF surface yet).</summary>
+    private void AttachRowContextMenu(UIElement row, WidgetDescriptor descriptor)
+    {
+        if (row is not FrameworkElement element) return;
+        var menu = new ContextMenu();
+
+        var hide = new MenuItem { Header = "Hide" };
+        hide.Click += (_, _) =>
+        {
+            _container.Layout.SetMetricEnabled(descriptor.Id, false);
+            Refresh();
+        };
+        menu.Items.Add(hide);
+
+        if (descriptor.Pinnable)
+        {
+            var isPinned = _container.Layout.IsPinned(descriptor.Id);
+            var pin = new MenuItem { Header = isPinned ? "Unstar" : "Star for menu bar" };
+            pin.Click += (_, _) =>
+            {
+                if (isPinned)
+                {
+                    _container.Layout.SetPinned(false, descriptor.Id);
+                }
+                else if (_container.Layout.CanPin(descriptor.Id))
+                {
+                    _container.Layout.SetPinned(true, descriptor.Id);
+                }
+                Refresh();
+            };
+            menu.Items.Add(pin);
+        }
+
+        menu.Items.Add(new Separator());
+
+        var provider = _container.Registry.Provider(descriptor.ProviderId);
+        var refreshItem = new MenuItem { Header = $"Refresh {provider?.DisplayName ?? descriptor.ProviderId}" };
+        refreshItem.Click += async (_, _) =>
+        {
+            await _container.RefreshNowAsync(descriptor.ProviderId).ConfigureAwait(true);
+            Refresh();
+        };
+        menu.Items.Add(refreshItem);
+
+        element.ContextMenu = menu;
     }
 
     private void UpdateFooterStatus()
@@ -149,11 +272,12 @@ public partial class MetricsWindow : Window
         return (container, inner);
     }
 
-    private static UIElement BuildRow(WidgetData data)
+    private static UIElement BuildRow(WidgetData data, bool isPinned = false)
     {
         var row = new StackPanel { Margin = new Thickness(0, 5, 0, 5) };
 
         var headerLine = new Grid();
+        headerLine.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         headerLine.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         headerLine.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
@@ -164,7 +288,22 @@ public partial class MetricsWindow : Window
             FontSize = 12.5,
             VerticalAlignment = VerticalAlignment.Center
         };
-        Grid.SetColumn(title, 0);
+        Grid.SetColumn(title, 1);
+
+        if (isPinned)
+        {
+            var star = new TextBlock
+            {
+                Text = "\u2605",
+                FontSize = 10,
+                Foreground = (Brush)Application.Current.Resources["AccentBrush"],
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(0, 0, 5, 0),
+                ToolTip = "Pinned to menu bar"
+            };
+            Grid.SetColumn(star, 0);
+            headerLine.Children.Add(star);
+        }
 
         var headline = new TextBlock
         {
@@ -174,7 +313,7 @@ public partial class MetricsWindow : Window
             FontSize = 13,
             HorizontalAlignment = System.Windows.HorizontalAlignment.Right
         };
-        Grid.SetColumn(headline, 1);
+        Grid.SetColumn(headline, 2);
 
         headerLine.Children.Add(title);
         headerLine.Children.Add(headline);
