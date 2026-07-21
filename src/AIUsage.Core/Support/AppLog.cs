@@ -1,5 +1,3 @@
-using System.Text;
-
 namespace AIUsage.Core.Support;
 
 /// <summary>
@@ -43,22 +41,22 @@ public static class AppLog
     private static readonly object LevelLock = new();
     private static Level _currentLevel = Level.Info;
 
-    private static readonly object FileLock = new();
-    private static string? _logFilePath;
+    private static LogFile? _sink;
 
+    /// <summary>
+    /// Bootstraps the file sink with single-archive rotation (10MB cap, mirroring the original).
+    /// Call once at startup, before any other subsystem logs.
+    /// </summary>
     public static void Bootstrap(string logFilePath, Level level = Level.Info)
     {
-        _logFilePath = logFilePath;
+        var directory = Path.GetDirectoryName(logFilePath);
+        var fileName = Path.GetFileName(logFilePath);
+        if (!string.IsNullOrEmpty(directory) && !string.IsNullOrEmpty(fileName))
+        {
+            _sink = new LogFile(directory, fileName);
+            _sink.Open();
+        }
         SetLevel(level);
-        try
-        {
-            var dir = Path.GetDirectoryName(logFilePath);
-            if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
-        }
-        catch
-        {
-            // best effort; logging must never crash the app
-        }
         Info(LogTag.Config, $"AIUsage starting (level={level}, log={logFilePath})");
     }
 
@@ -86,17 +84,6 @@ public static class AppLog
 
         System.Diagnostics.Debug.WriteLine(line);
 
-        if (_logFilePath is null) return;
-        try
-        {
-            lock (FileLock)
-            {
-                File.AppendAllText(_logFilePath, line + Environment.NewLine, Encoding.UTF8);
-            }
-        }
-        catch
-        {
-            // never throw from logging
-        }
+        _sink?.Append(line);
     }
 }

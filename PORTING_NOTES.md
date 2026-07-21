@@ -107,9 +107,18 @@ oltre ai path Unix originali (`/Users/...` ecc., mantenuti per compatibilità co
 log + `Debug.WriteLine`. Da valutare: integrazione con `Microsoft.Extensions.Logging` o ETW se
 serve diagnostica avanzata in futuro.
 
-`[OMESSO]` Percorso del file di log: nell'originale è `~/Library/Logs/OpenUsage/OpenUsage.log`.
-Non ancora deciso l'equivalente Windows (candidato: `%LOCALAPPDATA%\OpenUsage\Logs\OpenUsage.log`).
-Il progetto Tray dovrà chiamare `AppLog.Bootstrap(path)` all'avvio — non ancora fatto.
+`[FEDELE]` Percorso del file di log: `%LOCALAPPDATA%\AIUsage\Logs\AIUsage.log` (equivalente
+Windows di `~/Library/Logs/OpenUsage/OpenUsage.log`), impostato da `AIUsage.Tray/App.xaml.cs` che
+chiama `AppLog.Bootstrap(path)` all'avvio.
+
+`[FEDELE]` **Log rotation** (`Support/LogFile.cs`): porta 1:1 la logica dell'originale `LogFile.swift`
+— cap 10MB (`LogFile.DefaultMaxBytes`), rotazione a singolo archivio (`AIUsage.log` →
+`AIUsage.1.log` + nuovo `AIUsage.log` vuoto) quando una scrittura supererebbe il cap, trim al lancio
+se un file già sovradimensionato viene trovato da una sessione precedente, e disabilitazione
+silenziosa del sink (mai un crash) se apertura/rotazione fallisce. `AppLog` ora delega la scrittura
+su file a `LogFile` invece dello precedente `File.AppendAllText` diretto senza cap. Copertura test
+in `tests/AIUsage.Core.Tests/Support/LogFileTests.cs` (scrittura base, rotazione per superamento
+cap, trim al lancio su file esistente sovradimensionato, creazione automatica della directory).
 
 ## HTTP client (`Services/HttpClientService.cs`)
 
@@ -454,8 +463,8 @@ icona reale, Local HTTP API, Customize per-metrica, grafici, model breakdown hov
 iCloud Sync, Sparkle auto-update, PostHog telemetry (nessun valore reale per un utente Windows,
 concetti specifici dell'ecosistema Apple).
 
-1. ~~Test unitari sui mapper di ogni provider~~ — **fatto**, vedi sezione sopra (231 test verdi).
-2. Log rotation in `AppLog.cs` (cap ~10MB + 1 archivio, mirror dell'originale) — da fare.
+1. ~~Test unitari sui mapper di ogni provider~~ — **fatto**, vedi sezione sopra (235 test verdi).
+2. ~~Log rotation in `AppLog.cs`~~ — **fatto**, vedi `Support/LogFile.cs` sopra.
 3. Icona `.ico` multi-risoluzione reale per tray/exe (sostituisce il placeholder disegnato a
    runtime in `TrayIconFactory.cs`) — da fare.
 4. `LocalUsageServer`/`LocalUsageAPI` (API HTTP locale su `127.0.0.1:6736`) — da fare; migrare
