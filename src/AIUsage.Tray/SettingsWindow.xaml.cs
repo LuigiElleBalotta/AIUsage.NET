@@ -3,8 +3,11 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using AIUsage.Core.App;
+using AIUsage.Core.Stores;
 using AIUsage.Tray.Theme;
 using Brush = System.Windows.Media.Brush;
+using SaveFileDialog = Microsoft.Win32.SaveFileDialog;
+using OpenFileDialog = Microsoft.Win32.OpenFileDialog;
 
 namespace AIUsage.Tray;
 
@@ -145,6 +148,69 @@ public partial class SettingsWindow : Window
         grid.Children.Add(label);
         grid.Children.Add(toggle);
         return grid;
+    }
+
+    // MARK: - Usage history backup (local export/import — the Windows replacement for the Swift
+    // edition's iCloud sync, which only ever moved per-provider usage history; see PORTING_NOTES.md).
+
+    private void ExportHistoryButton_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new SaveFileDialog
+        {
+            Title = "Export Usage History",
+            Filter = "AIUsage history backup (*.json)|*.json",
+            FileName = $"aiusage-history-{DateTime.Now:yyyy-MM-dd}.json"
+        };
+        if (dialog.ShowDialog(this) != true) return;
+
+        try
+        {
+            UsageHistoryBackupStore.Export(_container.DataStore.Cache, dialog.FileName);
+            ShowBackupStatus($"Exported to {dialog.FileName}");
+        }
+        catch (UsageHistoryBackupException ex)
+        {
+            ShowBackupStatus(ex.Message, isError: true);
+        }
+        catch (Exception ex)
+        {
+            ShowBackupStatus($"Export failed: {ex.Message}", isError: true);
+        }
+    }
+
+    private void ImportHistoryButton_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new OpenFileDialog
+        {
+            Title = "Import Usage History",
+            Filter = "AIUsage history backup (*.json)|*.json"
+        };
+        if (dialog.ShowDialog(this) != true) return;
+
+        try
+        {
+            var mergedCount = UsageHistoryBackupStore.Import(_container.DataStore.Cache, dialog.FileName);
+            ShowBackupStatus(mergedCount == 0
+                ? "No providers to merge into — refresh those providers here first, then import again."
+                : $"Imported history for {mergedCount} provider(s).");
+        }
+        catch (UsageHistoryBackupException ex)
+        {
+            ShowBackupStatus(ex.Message, isError: true);
+        }
+        catch (Exception ex)
+        {
+            ShowBackupStatus($"Import failed: {ex.Message}", isError: true);
+        }
+    }
+
+    private void ShowBackupStatus(string message, bool isError = false)
+    {
+        BackupStatusText.Text = message;
+        BackupStatusText.Foreground = isError
+            ? (Brush)Application.Current.Resources["CriticalBrush"]
+            : (Brush)Application.Current.Resources["TextSecondaryBrush"];
+        BackupStatusText.Visibility = Visibility.Visible;
     }
 
     private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e) => DragMove();

@@ -44,6 +44,69 @@ public sealed class ProviderSnapshotCache
         return all.Where(kv => idSet.Contains(kv.Key)).ToDictionary(kv => kv.Key, kv => kv.Value);
     }
 
+    /// <summary>Every cached snapshot regardless of freshness, keyed by provider id — used by
+    /// <see cref="UsageHistoryBackupStore"/> to export the local usage-history backup.</summary>
+    public Dictionary<string, ProviderSnapshot> AllSnapshots() => new(LoadPayload());
+
+    /// <summary>Merges an imported <see cref="ProviderUsageHistory"/> into the currently cached
+    /// snapshot for a provider (only the history field — Lines/Plan/RefreshedAt stay live-refresh
+    /// owned). No-op if the provider has no cached snapshot yet, since there is nothing to attach
+    /// restored history to until that provider has actually refreshed at least once. The daily series
+    /// is unioned by day key, keeping whichever side reports the larger token count for an
+    /// overlapping day (the higher-fidelity, presumably more complete, record) — matching the spirit
+    /// of the original's multi-device merge without needing real device-identity plumbing.</summary>
+    public bool MergeUsageHistory(string providerId, ProviderUsageHistory imported)
+    {
+        var payload = LoadPayload();
+        if (!payload.TryGetValue(providerId, out var existing)) return false;
+
+        var merged = MergeHistories(existing.UsageHistory, imported);
+        payload[providerId] = existing with { UsageHistory = merged };
+        Save(payload);
+        return true;
+    }
+
+    private static ProviderUsageHistory MergeHistories(ProviderUsageHistory? current, ProviderUsageHistory imported)
+    {
+        if (current is null) return imported;
+
+        var dailyByDay = new Dictionary<string, DailyUsageEntry>();
+        foreach (var entry in current.Series.Daily) dailyByDay[entry.Date] = entry;
+        foreach (var entry in imported.Series.Daily)
+        {
+            if (!dailyByDay.TryGetValue(entry.Date, out var existingEntry) || entry.TotalTokens > existingEntry.TotalTokens)
+            {
+                dailyByDay[entry.Date] = entry;
+            }
+        }
+        var mergedSeries = new DailyUsageSeries(dailyByDay.Values.OrderByDescending(e => e.Date, StringComparer.Ordinal).ToList());
+
+        ModelUsageSeries? mergedModelUsage = null;
+        if (current.ModelUsage is not null || imported.ModelUsage is not null)
+        {
+            var modelsByDay = new Dictionary<string, DailyModelUsageEntry>();
+            foreach (var day in current.ModelUsage?.Daily ?? Array.Empty<DailyModelUsageEntry>()) modelsByDay[day.Date] = day;
+            foreach (var day in imported.ModelUsage?.Daily ?? Array.Empty<DailyModelUsageEntry>())
+            {
+                if (!modelsByDay.ContainsKey(day.Date)) modelsByDay[day.Date] = day;
+            }
+            mergedModelUsage = new ModelUsageSeries(modelsByDay.Values.OrderByDescending(d => d.Date, StringComparer.Ordinal).ToList());
+        }
+
+        var mergedUnknown = new Dictionary<string, HashSet<string>>();
+        foreach (var (day, models) in current.UnknownModelsByDay ?? new Dictionary<string, HashSet<string>>())
+        {
+            mergedUnknown[day] = new HashSet<string>(models);
+        }
+        foreach (var (day, models) in imported.UnknownModelsByDay ?? new Dictionary<string, HashSet<string>>())
+        {
+            if (!mergedUnknown.TryGetValue(day, out var set)) { set = new HashSet<string>(); mergedUnknown[day] = set; }
+            set.UnionWith(models);
+        }
+
+        return new ProviderUsageHistory(mergedSeries, mergedModelUsage, mergedUnknown);
+    }
+
     public ProviderSnapshot? Snapshot(string providerId)
     {
         var all = LoadPayload();

@@ -24,6 +24,10 @@ public sealed class WidgetDataStore
     private readonly Func<DateTimeOffset> _now;
     private static readonly TimeSpan FailureRetryBackoff = TimeSpan.FromSeconds(60);
 
+    /// <summary>The underlying persisted snapshot cache, exposed so App-layer features (usage
+    /// history export/import) can read/write it directly without re-plumbing a second reference.</summary>
+    public ProviderSnapshotCache Cache => _cache;
+
     public Dictionary<string, ProviderSnapshot> Snapshots { get; private set; } = new();
     public HashSet<string> RefreshingProviderIds { get; } = new();
     public DateTimeOffset? LastRefreshAt { get; private set; }
