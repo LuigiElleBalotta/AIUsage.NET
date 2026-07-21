@@ -15,6 +15,7 @@ public sealed class TrayController : IDisposable
 {
     private readonly AppContainer _container;
     private readonly NotifyIcon _notifyIcon;
+    private readonly GlobalHotkeyService _hotkey;
     private MetricsWindow? _window;
 
     public TrayController(AppContainer container)
@@ -34,6 +35,9 @@ public sealed class TrayController : IDisposable
         };
 
         _container.SnapshotsChanged += OnSnapshotsChanged;
+
+        _hotkey = new GlobalHotkeyService(() => Application.Current?.Dispatcher.Invoke(TogglePopup));
+        _hotkey.Start();
     }
 
     private ContextMenuStrip BuildContextMenu()
@@ -96,6 +100,7 @@ public sealed class TrayController : IDisposable
     public void Dispose()
     {
         _container.SnapshotsChanged -= OnSnapshotsChanged;
+        _hotkey.Dispose();
         _notifyIcon.Visible = false;
         _notifyIcon.Dispose();
         _window?.Close();
