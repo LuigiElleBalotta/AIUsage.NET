@@ -9,10 +9,10 @@ namespace AIUsage.Core.App;
 /// <summary>
 /// Composition root: owns the (constant) registry and the (mutable) stores. Simplified port of the
 /// Swift AppContainer — keeps provider catalog wiring, enablement, layout, data store, first-run
-/// seeding, the periodic refresh loop, and the local HTTP API. Omits (not yet ported, see
-/// PORTING_NOTES.md): multi-account Claude cards, iCloud sync, quota-pace notifications, telemetry,
-/// the resets-claim service, and the login-shell environment capture (unnecessary on Windows — a
-/// normal process already inherits persisted user/machine env vars).
+/// seeding, the periodic refresh loop, the local HTTP API, and multi-account Claude cards. Omits (not
+/// yet ported, see PORTING_NOTES.md): iCloud sync, quota-pace notifications, telemetry, the
+/// resets-claim service, and the login-shell environment capture (unnecessary on Windows — a normal
+/// process already inherits persisted user/machine env vars).
 /// </summary>
 public sealed class AppContainer : IDisposable
 {
@@ -20,6 +20,7 @@ public sealed class AppContainer : IDisposable
     public LayoutStore Layout { get; }
     public WidgetDataStore DataStore { get; }
     public ProviderEnablementStore Enablement { get; }
+    public ProviderAccountsStore Accounts { get; }
     public List<IApiKeyManaging> ApiKeyProviders { get; }
 
     private readonly List<IProviderRuntime> _providers;
@@ -33,7 +34,8 @@ public sealed class AppContainer : IDisposable
 
     public AppContainer(bool isFreshInstall = false)
     {
-        _providers = ProviderCatalog.Make();
+        Accounts = new ProviderAccountsStore();
+        _providers = ProviderCatalog.Make(Accounts);
         Registry = WidgetRegistry.FromProviders(_providers);
         ApiKeyProviders = _providers.OfType<IApiKeyManaging>().ToList();
 
@@ -70,6 +72,17 @@ public sealed class AppContainer : IDisposable
 
     /// <summary>Re-runs first-launch credential detection on demand (Customize "Reset All").</summary>
     public Task ReseedEnabledProviders() => FirstRunSeeder.Reseed(_providers, Enablement);
+
+    /// <summary>THE name resolver for a provider card — resolves through the account registry (a
+    /// user rename wins, else the account-derived "Claude — Org" title) for account-first cards, and
+    /// falls back to the static <see cref="Provider.DisplayName"/> baked at launch for every other
+    /// provider. Mirrors the Swift AppContainer.displayName(for:).</summary>
+    public string DisplayName(string providerId) =>
+        Accounts.ResolvedDisplayName(providerId) ?? Registry.Provider(providerId)?.DisplayName ?? providerId;
+
+    /// <summary>Stores a user rename for an account card; null or blank clears it back to the
+    /// derived name. A no-op for providers with no account record.</summary>
+    public void RenameProvider(string providerId, string? name) => Accounts.Rename(providerId, name);
 
     private async Task StartPeriodicRefresh(CancellationToken token)
     {

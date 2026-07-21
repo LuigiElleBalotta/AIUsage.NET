@@ -107,6 +107,25 @@ public sealed class ClaudeAuthError : Exception, Models.ICategorizedError
 public sealed record ClaudeOAuthConfig(Uri UsageUrl, Uri RefreshUrl, string ClientId);
 
 /// <summary>
+/// Which login a <see cref="ClaudeAuthStore"/> is allowed to see. <see cref="Standard"/> is the
+/// default card — byte-identical to the store's historical behavior. <see cref="ConfigDir"/> backs an
+/// extra account card and deliberately has no cross-account, environment-token, or Desktop fallback:
+/// the card can only ever read the one login it was created for. Direct port of the Swift
+/// ClaudeCredentialScope.
+/// </summary>
+public abstract record ClaudeCredentialScope
+{
+    public sealed record Standard : ClaudeCredentialScope;
+
+    /// <summary>One extra CLAUDE_CONFIG_DIR home. <paramref name="KeychainLiteral"/> is the literal
+    /// string whose hash names the Credential Manager item (Claude Code hashes the env value as
+    /// typed — "~/…" vs absolute differ).</summary>
+    public sealed record ConfigDir(string Path, string KeychainLiteral) : ClaudeCredentialScope;
+
+    public static readonly ClaudeCredentialScope StandardScope = new Standard();
+}
+
+/// <summary>
 /// Reads Claude Code's credentials on this machine. Windows port note: Claude Code (a cross-platform
 /// npm CLI) writes `~/.claude/.credentials.json` (or `%CLAUDE_CONFIG_DIR%/.credentials.json`) on every
 /// OS including Windows, so the file path is the primary and most reliable source here. Windows
@@ -128,15 +147,26 @@ public sealed class ClaudeAuthStore
     private readonly IKeychainAccessing _keychain;
     private readonly Func<DateTimeOffset> _now;
 
+    public ClaudeCredentialScope Scope { get; }
+    /// <summary>Whether the Standard store may fall back to Claude Desktop's credentials. On by
+    /// default (the historical behavior); the catalog turns it OFF once extra Claude account cards
+    /// exist, because the Desktop login could belong to any of them — borrowing it unpinned could
+    /// fetch one account's usage onto another account's card.</summary>
+    public bool AllowsDesktopFallback { get; }
+
     public ClaudeAuthStore(
         IEnvironmentReading? environment = null,
         ITextFileAccessing? files = null,
         IKeychainAccessing? keychain = null,
+        ClaudeCredentialScope? scope = null,
+        bool allowsDesktopFallback = true,
         Func<DateTimeOffset>? now = null)
     {
         _environment = environment ?? new ProcessEnvironmentReader();
         _files = files ?? new LocalTextFileAccessor();
         _keychain = keychain ?? new WindowsCredentialAccessor();
+        Scope = scope ?? ClaudeCredentialScope.StandardScope;
+        AllowsDesktopFallback = allowsDesktopFallback;
         _now = now ?? (() => DateTimeOffset.UtcNow);
     }
 
@@ -159,6 +189,9 @@ public sealed class ClaudeAuthStore
         return candidates;
     }
 
+    /// <summary>Whether this scoped card's login leaves any local footprint, checked without ever
+    /// reading a keychain secret — safe for the every-launch seeding probe (NewProviderSeeder), which
+    /// must never raise a permission dialog.</summary>
     public bool HasCredentialFootprint()
     {
         if (_files.Exists(CredentialsPath())) return true;
@@ -167,6 +200,10 @@ public sealed class ClaudeAuthStore
 
     private List<ClaudeCredentialState> ApplyingEnvironmentToken(List<ClaudeCredentialState> stored)
     {
+        // An ambient env token describes the DEFAULT login's environment; a scoped card must never
+        // inherit it (that would leak one account's token into another account's card).
+        if (Scope is not ClaudeCredentialScope.Standard) return stored;
+
         var envAccessToken = EnvText("CLAUDE_CODE_OAUTH_TOKEN");
         if (envAccessToken is null) return stored;
 
@@ -279,10 +316,50 @@ public sealed class ClaudeAuthStore
         return new ClaudeOAuthConfig(usageUrl, refreshUrl, endpoints.ClientId);
     }
 
+    /// <summary>The Credential Manager service names as this environment's Claude Code writes
+    /// them — the single source both the scoped store and config-dir discovery build from, so a
+    /// non-prod OAuth setup (local/staging/custom, which suffixes the service) can never make
+    /// discovery probe one name while refresh reads another.</summary>
+    public static string BaseKeychainServiceName(IEnvironmentReading environment)
+    {
+        var suffix = new ClaudeAuthStore(environment: environment).ResolveOAuthEndpoints().Suffix;
+        return $"{KeychainServicePrefix}{suffix}-credentials";
+    }
+
+    public static string ScopedKeychainServiceName(string configDirLiteral, IEnvironmentReading environment) =>
+        $"{BaseKeychainServiceName(environment)}-{HashSuffix(configDirLiteral)}";
+
     public List<string> KeychainServiceCandidates()
     {
+        // Only needs the file suffix, which never fails — keep this off the throwing URL path so
+        // credential loading stays forgiving even when a custom OAuth URL is malformed.
         var b = $"{KeychainServicePrefix}{ResolveOAuthEndpoints().Suffix}-credentials";
-        return new List<string> { b };
+        switch (Scope)
+        {
+            case ClaudeCredentialScope.ConfigDir configDir:
+                // Exactly this card's item — never the bare default service, which is another
+                // account's login.
+                return new List<string> { $"{b}-{HashSuffix(configDir.KeychainLiteral)}" };
+            case ClaudeCredentialScope.Standard:
+            default:
+                var configDirOverride = EnvText("CLAUDE_CONFIG_DIR");
+                if (configDirOverride is not null)
+                {
+                    return new List<string> { $"{b}-{HashSuffix(configDirOverride)}", b };
+                }
+                return new List<string> { b };
+        }
+    }
+
+    /// <summary>Direct port of Swift's private hashSuffix: SHA-256 of the NFC-normalized literal,
+    /// hex-encoded, first 8 characters. Must stay byte-identical to discovery's computation
+    /// (<see cref="ScopedKeychainServiceName"/>) or a scoped card could probe one service name while
+    /// Claude Code itself writes to another.</summary>
+    private static string HashSuffix(string value)
+    {
+        var normalized = value.Normalize(System.Text.NormalizationForm.FormC);
+        var digest = System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(normalized));
+        return Convert.ToHexString(digest).ToLowerInvariant()[..8];
     }
 
     public static ClaudeCredentialsFile? ParseCredentials(string text) =>
@@ -313,7 +390,11 @@ public sealed class ClaudeAuthStore
         return null;
     }
 
-    private string CredentialsPath() => $"{EnvText("CLAUDE_CONFIG_DIR") ?? DefaultClaudeHome}/{CredentialFileName}";
+    private string CredentialsPath()
+    {
+        if (Scope is ClaudeCredentialScope.ConfigDir configDir) return $"{configDir.Path}/{CredentialFileName}";
+        return $"{EnvText("CLAUDE_CONFIG_DIR") ?? DefaultClaudeHome}/{CredentialFileName}";
+    }
 
     private string? EnvText(string name) => _environment.Value(name)?.Trim().NilIfEmpty();
 

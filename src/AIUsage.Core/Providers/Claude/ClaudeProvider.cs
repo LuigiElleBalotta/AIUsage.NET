@@ -37,6 +37,23 @@ public sealed class ClaudeProvider : IProviderRuntime
         _pricing = pricing ?? (() => Task.FromResult(ModelPricingStore.Shared.Current()));
     }
 
+    /// <summary>Builds an extra Claude account card: a provider pinned to one custom config dir's
+    /// credentials and spend logs, with no Desktop fallback and no environment-token/cross-account
+    /// leakage (see <see cref="ClaudeCredentialScope.ConfigDir"/>). Direct counterpart of how the
+    /// Swift ProviderCatalog builds a ClaudeAccountCard's runtime.</summary>
+    public static ClaudeProvider MakeAccountCard(App.ClaudeAccountCard card)
+    {
+        var scope = new ClaudeCredentialScope.ConfigDir(card.ConfigDirPath, card.KeychainLiteral);
+        var authStore = new ClaudeAuthStore(scope: scope, allowsDesktopFallback: false);
+        var roots = new List<string> { card.ConfigDirPath };
+        if (card.ExtraLogRoots is { Count: > 0 }) roots.AddRange(card.ExtraLogRoots);
+        var logScanner = new ClaudeLogUsageScanner(fixedRoots: roots);
+        return new ClaudeProvider(
+            provider: MakeProvider(card.Id, card.DisplayName),
+            authStore: authStore,
+            logUsageScanner: logScanner);
+    }
+
     public static Provider MakeProvider(string id = "claude", string displayName = "Claude") => new(
         id, displayName, "claude",
         new List<ProviderLink>
@@ -65,11 +82,17 @@ public sealed class ClaudeProvider : IProviderRuntime
     {
         return await Task.Run(() =>
         {
+            // Scoped extra-account cards answer from footprints only (file existence / Credential
+            // Manager attributes) so the every-launch seeding probe can never raise a credential
+            // prompt for an account the user hasn't granted yet. The secret read happens on the
+            // first refresh.
+            if (AuthStore.Scope is not ClaudeCredentialScope.Standard) return AuthStore.HasCredentialFootprint();
+
             var candidates = AuthStore.LoadCredentialCandidates();
             if (candidates.Any(c => c.HasUsableAccessToken)) return true;
             // No Claude Code CLI credentials found — a Claude Desktop install with cached OAuth
             // material still counts as "usable locally" for first-run provider detection.
-            return DesktopAuthStore.HasCredentialMaterial();
+            return AuthStore.AllowsDesktopFallback && DesktopAuthStore.HasCredentialMaterial();
         }, cancellationToken).ConfigureAwait(false);
     }
 
@@ -78,10 +101,14 @@ public sealed class ClaudeProvider : IProviderRuntime
         var storedCandidates = await Task.Run(() => AuthStore.LoadCredentialCandidates(), cancellationToken).ConfigureAwait(false);
         var candidates = storedCandidates.Where(c => c.HasUsableAccessToken).ToList();
 
-        if (candidates.Count == 0)
+        var desktopAllowed = AuthStore.Scope is ClaudeCredentialScope.Standard && AuthStore.AllowsDesktopFallback;
+        if (candidates.Count == 0 && desktopAllowed)
         {
             // Claude Code's own CLI credentials (file/Credential Manager) weren't found — fall back to
-            // borrowing a currently-valid access token from a local Claude Desktop install, if any.
+            // borrowing a currently-valid access token from a local Claude Desktop install, if any. A
+            // scoped extra-account card (or the Standard card once extra cards exist) never does this:
+            // the Desktop login could belong to any account, so borrowing it unpinned could fetch one
+            // account's usage onto another account's card.
             var desktopState = await Task.Run(() => DesktopAuthStore.Load(), cancellationToken).ConfigureAwait(false);
             if (desktopState is not null)
             {

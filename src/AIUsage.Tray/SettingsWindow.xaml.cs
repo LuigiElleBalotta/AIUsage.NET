@@ -37,7 +37,7 @@ public partial class SettingsWindow : Window
         for (var i = 0; i < providers.Count; i++)
         {
             var provider = providers[i];
-            var row = BuildProviderRow(provider.Id, provider.DisplayName);
+            var row = BuildProviderRow(provider.Id, _container.DisplayName(provider.Id));
             ProviderTogglesList.Children.Add(row);
             if (i < providers.Count - 1)
             {
@@ -106,7 +106,7 @@ public partial class SettingsWindow : Window
 
             MetricTogglesList.Children.Add(new TextBlock
             {
-                Text = provider.DisplayName,
+                Text = _container.DisplayName(provider.Id),
                 FontSize = 11,
                 FontWeight = FontWeights.SemiBold,
                 Foreground = (Brush)Application.Current.Resources["TextSecondaryBrush"],

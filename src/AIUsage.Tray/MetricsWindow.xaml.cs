@@ -63,10 +63,10 @@ public partial class MetricsWindow : Window
             if (descriptor.ProviderId != lastProviderId)
             {
                 lastProviderId = descriptor.ProviderId;
-                var provider = _container.Registry.Provider(descriptor.ProviderId);
                 var snapshot = _container.DataStore.Snapshots.GetValueOrDefault(descriptor.ProviderId);
-                var (cardRoot, cardBody) = BuildProviderCard(provider?.DisplayName ?? descriptor.ProviderId, descriptor.ProviderId, snapshot?.Plan);
+                var (cardRoot, cardBody) = BuildProviderCard(_container.DisplayName(descriptor.ProviderId), descriptor.ProviderId, snapshot?.Plan);
                 AttachProviderDragReorder(cardRoot, descriptor.ProviderId);
+                AttachProviderHeaderContextMenu(cardRoot, descriptor.ProviderId);
                 ProviderList.Children.Add(cardRoot);
                 currentCardBody = cardBody;
             }
@@ -146,10 +146,35 @@ public partial class MetricsWindow : Window
         DragDrop.DoDragDrop(source, data, DragDropEffects.Move);
     }
 
+    /// <summary>Right-click menu on a provider's card header: "Rename..." for extra-account cards
+    /// only (e.g. a second "claude@ab12cd34" card) — the plain WPF counterpart of the Swift
+    /// dashboard's card-header Rename item. Non-account providers (Codex, Cursor, ...) get no menu at
+    /// all since they have nothing to rename.</summary>
+    private void AttachProviderHeaderContextMenu(UIElement cardRoot, string providerId)
+    {
+        if (!Core.Stores.ProviderAccountID.IsAccountCard(providerId)) return;
+        if (cardRoot is not Border card) return;
+
+        var menu = new ContextMenu();
+        var rename = new MenuItem { Header = "Rename..." };
+        rename.Click += (_, _) =>
+        {
+            var current = _container.DisplayName(providerId);
+            var dialog = new RenameDialog(current) { Owner = this };
+            if (dialog.ShowDialog() == true)
+            {
+                _container.RenameProvider(providerId, dialog.ResultText);
+                Refresh();
+            }
+        };
+        menu.Items.Add(rename);
+        card.ContextMenu = menu;
+    }
+
     /// <summary>Right-click menu for a metric row: Hide (SetMetricEnabled false), Star/Unstar for the
     /// menu bar (LayoutStore pin model, capped per provider), and Refresh this provider — the same
-    /// three actions the Swift dashboard's row context menu offers (minus Rename/Customize, which have
-    /// no WPF surface yet).</summary>
+    /// three actions the Swift dashboard's row context menu offers (minus Customize, which has no
+    /// WPF surface yet).</summary>
     private void AttachRowContextMenu(UIElement row, WidgetDescriptor descriptor)
     {
         if (row is not FrameworkElement element) return;
@@ -184,8 +209,7 @@ public partial class MetricsWindow : Window
 
         menu.Items.Add(new Separator());
 
-        var provider = _container.Registry.Provider(descriptor.ProviderId);
-        var refreshItem = new MenuItem { Header = $"Refresh {provider?.DisplayName ?? descriptor.ProviderId}" };
+        var refreshItem = new MenuItem { Header = $"Refresh {_container.DisplayName(descriptor.ProviderId)}" };
         refreshItem.Click += async (_, _) =>
         {
             await _container.RefreshNowAsync(descriptor.ProviderId).ConfigureAwait(true);

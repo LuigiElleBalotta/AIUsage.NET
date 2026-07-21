@@ -29,15 +29,28 @@ public sealed class ClaudeLogUsageScanner
     private readonly IEnvironmentReading _environment;
     private readonly Func<string> _homeDirectory;
     private readonly IncrementalJsonlScanner<Entry> _scanner;
+    /// <summary>When set, scanning is pinned to exactly these roots, replacing the normal env/home
+    /// resolution — used by extra Claude account cards, which must only ever read their own
+    /// CLAUDE_CONFIG_DIR home's logs, never the default account's.</summary>
+    private readonly List<string>? _fixedRoots;
+    /// <summary>Same-account extra config dirs discovered this launch (see
+    /// <see cref="App.ProviderAccountAssembly.DefaultClaudeExtraLogRoots"/>): appended AFTER the
+    /// normal env/home resolution, never replacing it — the default card keeps reading whichever
+    /// home CLAUDE_CONFIG_DIR/XDG_CONFIG_HOME point at, plus these extra spend-log roots.</summary>
+    private readonly List<string> _extraRoots;
 
     public ClaudeLogUsageScanner(
         IEnvironmentReading? environment = null,
         Func<string>? homeDirectory = null,
-        IncrementalJsonlScanner<Entry>? scanner = null)
+        IncrementalJsonlScanner<Entry>? scanner = null,
+        List<string>? fixedRoots = null,
+        List<string>? extraRoots = null)
     {
         _environment = environment ?? new ProcessEnvironmentReader();
         _homeDirectory = homeDirectory ?? (() => Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
         _scanner = scanner ?? new IncrementalJsonlScanner<Entry>();
+        _fixedRoots = fixedRoots;
+        _extraRoots = extraRoots ?? new List<string>();
     }
 
     public async Task<LogUsageScan?> ScanAsync(int daysBack, DateTimeOffset now, ModelPricing pricing, CancellationToken cancellationToken = default)
@@ -74,6 +87,12 @@ public sealed class ClaudeLogUsageScanner
             roots.Add(path);
         }
 
+        if (_fixedRoots is not null)
+        {
+            foreach (var root in _fixedRoots) AddIfValid(root);
+            return roots;
+        }
+
         var raw = _environment.Value("CLAUDE_CONFIG_DIR")?.Trim();
         if (!string.IsNullOrEmpty(raw))
         {
@@ -99,6 +118,7 @@ public sealed class ClaudeLogUsageScanner
             AddIfValid(Path.Combine(xdgBase, "claude"));
             AddIfValid(Path.Combine(home, ".claude"));
         }
+        foreach (var extra in _extraRoots) AddIfValid(PathHelpers.ExpandHome(extra));
         return roots;
     }
 
