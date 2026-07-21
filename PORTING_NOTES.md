@@ -392,12 +392,50 @@ conteneva solo la CLI (o solo la tray app, a seconda dell'ordine), mai entrambi.
 visibile — bisognava aprire lo zip per notare che ne mancava uno. Corretto tenendo la CLI nella sua
 sottocartella `cli/` invece di appiattire tutto in una singola directory.
 
-## Documentazione (`docs/`)
+## Documentazione (`docs/`) — **fatto**
 
-`[OMESSO]` Non ancora copiata/adattata. Piano: creare `openusageWindows/docs/` con gli stessi file,
-aggiornando i riferimenti a path macOS (`~/Library/...`, Keychain, `.sh`) con gli equivalenti
-Windows via una sub-agent dedicata, una volta che il comportamento reale è implementato (i docs
-descrivono comportamento, non vogliamo scrivere doc che poi il codice non rispetta).
+`[FEDELE]` Copiata/adattata integralmente: `docs/README.md`, `architecture.md`, `cli.md`,
+`dashboard.md`, `debugging.md`, `logging.md`, `pricing.md`, `privacy.md`,
+`provider-enablement.md`, `proxy.md`, `refreshing.md`, `adding-a-provider.md`, più
+`docs/providers/*.md` per tutti i 10 provider. Riferimenti macOS (`~/Library/...`, Keychain,
+`.sh`) sostituiti con gli equivalenti Windows (`%LOCALAPPDATA%\AIUsage\Logs`, Credential Manager,
+`.ps1`) e allineati al comportamento realmente implementato (nessun contenuto aspirazionale).
+`dashboard.md` aggiornato per riflettere il redesign UI (barre di progresso reali, icone brand,
+Settings funzionante), continuando a segnalare correttamente come non ancora implementati la
+Customize per-metrica e i grafici.
+
+## Test automatici (`tests/AIUsage.Core.Tests/`) — **fatto** (copertura mapper + support)
+
+`[FEDELE]` Creato il progetto xUnit `tests/AIUsage.Core.Tests` (target `net8.0-windows`, referenzia
+`AIUsage.Core`), aggiunto a `AIUsage.sln`. **231 test, tutti verdi** (`dotnet test`). Copertura:
+
+- **Support**: `Pace` (Evaluate Ahead/OnTrack/Behind/null, `SecondsToRunOut`, `MinimumElapsed`),
+  `MetricFormatter` (Number per Percent/Dollars/Count su stili Tray/Row/Full, `StringFor`,
+  `CostPerMtok`), `LogRedaction` (JWT, API key, devin token, `account=`, path Windows/Unix, URL,
+  body), `ProviderParse`/`StringExtensions` (JsonObject, Number, ClampPercent, CentsToDollars,
+  UnwrapGoKeyring, UrlFormEncoded, NilIfEmpty, TrimmingTrailingSlashes, TitleCased),
+  `AIUsageISO8601` (parse/round-trip), `Formatters` (CompactDuration, WhenLabel, DeadlineLabel,
+  ResetRelativeLabel, Currency, MonthDayLabel).
+- **Provider mapper**: Claude, Codex, Grok (+ `GrokCreditsConfigDecoder`), Devin, Copilot, Cursor
+  (+ `CursorPlanUsageFacts`), OpenRouter, Z.ai, OpenCode (`OpenCodeGoWindowMath` — session/weekly/
+  anchored-month math), Antigravity (quota summary parsing, label pooling/normalizzazione,
+  formattazione piano). Ogni mapper ha test per il percorso felice, i casi limite (dati mancanti/
+  malformati → eccezione con `Kind` corretto), e gli status HTTP di errore (401/500) dove
+  applicabile.
+- `tests/AIUsage.Core.Tests/TestHelpers/HttpResponseFixture.cs` — helper per costruire
+  `HttpResponseResult` senza chiamate HTTP reali.
+
+`[BUG FIX — trovato scrivendo i test]` `PaceTests.SecondsToRunOut_ReturnsPositiveEta_WhenBehind`
+inizialmente usava uno scenario con `used > limit` (usage già oltre il limite): in quel caso
+`SecondsToRunOut` ritorna correttamente `null` (non ha senso calcolare un ETA di "esaurimento" se
+il limite è già superato — `limit - used` è negativo). Corretto il test per usare uno scenario
+realistico di "Behind per proiezione" (usage ancora sotto il limite ma burn-rate che proietta il
+superamento prima del reset), aggiunto un test separato per il caso "già oltre il limite → null".
+Nessun bug nel codice di produzione — solo nel test.
+
+Copertura non ancora fatta (bassa priorità, valutare in futuro): test a livello Stores (es.
+`WidgetDataStore` refresh/cache/backoff — dove è stato trovato il bug di concorrenza reale — e
+`ProviderEnablementStore` enable/seed logic).
 
 ## Stato attuale: porting end-to-end funzionante
 
@@ -410,21 +448,28 @@ crash).
 
 ## Prossimi passi (rifinitura, non più "completare il porting")
 
-1. Script `.ps1`/`.bat` per build/run (mirror di `script/*.sh`) — non ancora scritti.
-2. Test unitari sui mapper di ogni provider (pure functions, facilmente testabili senza I/O) —
-   nessuno scritto finora. Il bug fix di `CodexUsageMapper.ClassifiedWindowLine` (vedi sopra) è
-   stato trovato solo grazie al test manuale con credenziali reali — un buon promemoria che i
-   mapper meritano copertura di test prima di dichiararli production-ready.
-3. UI WPF di rifinitura: card per-widget con barre di progresso, grafici per `MetricLine.Chart`,
-   drag-reorder, pin, schermata Settings, panel non-activating in stile macOS. Attualmente
-   `MetricsWindow` è un semplice elenco di righe di testo.
-4. `LocalUsageServer`/`LocalUsageAPI` (API HTTP locale su :6736) — non ancora portata; la CLI la
-   bypassa leggendo/scrivendo direttamente la cache condivisa.
-5. Icona vera per la tray (attualmente un placeholder generato a runtime) e per l'eseguibile —
-   deliberatamente rimandato dall'utente.
-6. Multi-account Claude, iCloud sync, quota-pace notifications, telemetria, Sparkle/aggiornamenti,
-   scorciatoia da tastiera globale — tutte le feature elencate come `[OMESSO]` sopra, da valutare
-   una per una in base a cosa serve davvero all'utente finale.
+Decisione esplicita dell'utente ("dobbiamo portare tutto per avere una versione stabile e completa
+e funzionante", scelta di scope delegata all'agente): si portano test automatici, log rotation,
+icona reale, Local HTTP API, Customize per-metrica, grafici, model breakdown hover. Non si portano
+iCloud Sync, Sparkle auto-update, PostHog telemetry (nessun valore reale per un utente Windows,
+concetti specifici dell'ecosistema Apple).
+
+1. ~~Test unitari sui mapper di ogni provider~~ — **fatto**, vedi sezione sopra (231 test verdi).
+2. Log rotation in `AppLog.cs` (cap ~10MB + 1 archivio, mirror dell'originale) — da fare.
+3. Icona `.ico` multi-risoluzione reale per tray/exe (sostituisce il placeholder disegnato a
+   runtime in `TrayIconFactory.cs`) — da fare.
+4. `LocalUsageServer`/`LocalUsageAPI` (API HTTP locale su `127.0.0.1:6736`) — da fare; migrare
+   `UsageReader` della CLI per passare di lì, per parità di schema con l'originale.
+5. Customize UI per-metrica (toggle di singole metriche, non solo provider interi) in
+   `SettingsWindow` o una nuova finestra, appoggiata su `LayoutStore.SetMetricEnabled` — da fare.
+6. Grafici per `MetricLine.Chart` (Usage Trend) in `MetricsWindow.xaml.cs` — da fare.
+7. Popover di breakdown modelli al hover per le righe di spesa (Claude/Codex/Cursor/Grok) — da
+   fare.
+8. Script `.ps1`/`.bat` per build/run — **fatto** (`script/build_and_run.ps1`, `release.ps1`,
+   `update_pricing_snapshots.ps1`).
+9. Multi-account Claude, quota-pace notifications, scorciatoia da tastiera globale — feature
+   `[OMESSO]` residue, non nello scope della "versione stabile e completa" decisa sopra; da
+   valutare solo se richieste esplicitamente in futuro.
 
 ---
 *Aggiornare questo file ad ogni sessione di lavoro significativa, aggiungendo nuove voci o
