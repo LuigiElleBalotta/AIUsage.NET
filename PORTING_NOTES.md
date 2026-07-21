@@ -415,8 +415,23 @@ provider/risorsa mancante omessi, errori in coda).
 `[OMESSO]` **iCloud Sync**: nessun equivalente Windows deciso ancora (OneDrive? File locale +
 nessun sync multi-macchina per ora?). Da discutere.
 
-`[OMESSO]` **Sparkle auto-update**: da sostituire con un meccanismo Windows-nativo (es. Squirrel.Windows,
-oppure un semplice check-and-download-installer contro le GitHub Releases). Non iniziato.
+~~`[OMESSO]` **Sparkle auto-update**~~ — **fatto**: `Services/UpdateChecker.cs` sostituisce Sparkle
+con un semplice poll delle GitHub Releases (`GET /repos/LuigiElleBalotta/AIUsage.NET/releases/latest`),
+confronta il `tag_name` con `AppVersion.Display()` (confronto numerico per componenti, non
+lessicografico — "0.2" > "0.1.9"), e non installa nulla in automatico: apre solo la pagina della
+release nel browser dell'utente quando sceglie di aggiornare. Throttle di 24h persistito via
+`ISettingsStore` (`aiusage.updateChecker.lastCheckedAt`) per non interrogare l'API ad ogni avvio, e
+un "Skip this version" (`aiusage.updateChecker.skippedVersion`) per non riproporre una release già
+ignorata (una versione più recente verrebbe comunque segnalata). `TrayController` lancia un check
+silenzioso e throttled a ogni avvio (`CheckForUpdatesOnLaunchAsync`) e aggiunge una voce
+"Check for Updates..." nel menu della tray icon per un check manuale immediato; se trovato un
+aggiornamento, in testa al menu compare una voce in grassetto "Update available: vX.Y.Z" (click →
+apre la release page) più un balloon tip nativo. Nessun download/installazione silenziosa: è
+deliberatamente il meccanismo più semplice descritto in questa stessa nota, coerente con un progetto
+open source senza certificato di code-signing (vedi anche `script/release.ps1`). Test in
+`tests/AIUsage.Core.Tests/Services/UpdateCheckerTests.cs` (confronto versioni, esito rete
+riuscito/fallito/404, throttling, skip-versione) con un `FakeHttpClient` scriptabile aggiunto ai
+`TestHelpers` condivisi.
 
 `[OMESSO]` **KeyboardShortcuts** (libreria Swift per lo shortcut globale) → da sostituire con
 `RegisterHotKey`/`UnregisterHotKey` (Win32) o una libreria .NET equivalente (es. `NHotkey`).
@@ -535,19 +550,28 @@ concetti specifici dell'ecosistema Apple).
    vedi sezione UI WPF sopra).
 8. Script `.ps1`/`.bat` per build/run — **fatto** (`script/build_and_run.ps1`, `release.ps1`,
    `update_pricing_snapshots.ps1`).
-9. Multi-account Claude, quota-pace notifications, scorciatoia da tastiera globale, drag-reorder e
-   pin dalla UI — feature `[OMESSO]` residue, non nello scope della "versione stabile e completa"
-   decisa sopra; da valutare solo se richieste esplicitamente in futuro.
+9. ~~Scorciatoia da tastiera globale, drag-reorder e pin dalla UI~~ — **fatto** in una sessione
+   successiva (istruzione esplicita dell'utente: "finire tutto"). Vedi le rispettive sezioni sopra
+   per il dettaglio (`NewProviderSeeder`, drag-reorder/pin, `GlobalHotkeyService`, Claude Desktop
+   fallback, backup locale storico, `UpdateChecker`).
+10. Multi-account Claude — in corso, vedi sezione dedicata più sotto.
+11. Quota-pace notifications, PostHog telemetry — restano `[OMESSO]` per scelta deliberata (nessun
+   valore reale per un utente Windows di un progetto OSS single-maintainer). Provider "Pi"
+   (aggregatore cross-provider) — bassa priorità, vedi tabella provider sopra.
 
-## Riepilogo scope "versione stabile e completa" (decisione dell'utente, sessione corrente)
+## Riepilogo scope "versione stabile e completa" (aggiornato)
 
-Tutti i 6 elementi che l'agente aveva deciso di portare per raggiungere una "versione stabile e
-completa e funzionante" sono ora **fatti**: test automatici (235+ test), log rotation, icona reale,
-Local HTTP API, Customize per-metrica, grafici Usage Trend, e (bonus, stesso giro) model breakdown
-hover. La solution compila senza warning (`dotnet build AIUsage.sln`, 0 avvisi/0 errori) e l'intera
-suite di test passa (`dotnet test`). Resta da fare, se richiesto in futuro: multi-account Claude,
-iCloud Sync, quota-pace notifications, Sparkle/aggiornamenti, scorciatoia da tastiera globale,
-telemetria, drag-reorder/pin dalla UI — tutti deliberatamente fuori scope per questa sessione.
+Oltre ai 6 elementi della sessione precedente (test automatici, log rotation, icona reale, Local
+HTTP API, Customize per-metrica, grafici Usage Trend + model breakdown hover), una sessione
+successiva ha portato quasi tutte le feature `[OMESSO]` rimanenti su richiesta esplicita e diretta
+dell'utente ("devi finire tutto"): `NewProviderSeeder`, drag-reorder e pin (★) dalla UI, scorciatoia
+da tastiera globale (Ctrl+Alt+U), backup locale export/import dello storico usage (sostituto di
+iCloud Sync — nessun vero sync multi-macchina, solo un file JSON portabile a scelta dell'utente),
+fallback alle credenziali di Claude Desktop, e `UpdateChecker` (sostituto di Sparkle via GitHub
+Releases). Multi-account Claude resta l'ultimo elemento in corso (vedi sezione dedicata). Restano
+deliberatamente fuori scope: quota-pace notifications, PostHog telemetry, provider "Pi" — nessuno di
+questi ha un impatto reale su un utente Windows di questo fork, e nessuno è stato richiesto
+esplicitamente. La solution compila senza warning e l'intera suite di test passa.
 
 ---
 *Aggiornare questo file ad ogni sessione di lavoro significativa, aggiungendo nuove voci o
