@@ -1,0 +1,60 @@
+name: Release
+
+# Tag a version to ship it: `git tag v0.1.0 && git push origin v0.1.0`.
+# A tag with a pre-release suffix (e.g. v0.1.0-beta.1) publishes as a GitHub pre-release; a plain tag
+# (v0.1.0) publishes as "Latest". There is no auto-update feed yet (the Swift edition's Sparkle
+# appcast has no Windows equivalent ported — see PORTING_NOTES.md), so this workflow only builds and
+# publishes the release asset; it does not notarize, sign with a certificate, or update any feed.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to build (e.g. v0.1.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag }}
+          persist-credentials: false
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Resolve tag and version
+        id: meta
+        shell: pwsh
+        run: |
+          $tag = "${{ inputs.tag }}"
+          if ([string]::IsNullOrEmpty($tag)) { $tag = "${{ github.ref_name }}" }
+          $version = $tag -replace '^v', ''
+          $prerelease = $tag -match '-'
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "prerelease=$prerelease" >> $env:GITHUB_OUTPUT
+
+      - name: Build and publish
+        shell: pwsh
+        run: ./script/release.ps1 -Version "${{ steps.meta.outputs.version }}" -Runtime win-x64
+
+      # NOTE: unsigned. Windows code signing (signtool + an Authenticode certificate) is not yet
+      # wired up — see PORTING_NOTES.md "Prossimi passi". SmartScreen will warn on first run until
+      # this is added.
+      - name: Publish to GitHub Releases
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          name: AIUsage.NET ${{ steps.meta.outputs.version }}
+          prerelease: ${{ steps.meta.outputs.prerelease }}
+          files: dist/AIUsage-${{ steps.meta.outputs.version }}-win-x64.zip

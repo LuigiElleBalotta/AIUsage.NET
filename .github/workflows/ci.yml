@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build and Test
+    # AIUsage.NET targets net8.0-windows (WPF tray app + Windows Credential Manager P/Invoke), so it
+    # must build on a Windows runner — there is no cross-compilation story for the tray project.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Restore
+        run: dotnet restore AIUsage.sln
+
+      - name: Build
+        run: dotnet build AIUsage.sln --configuration Release --no-restore
+
+      - name: Test
+        # No test project exists yet (see PORTING_NOTES.md) — this becomes a real gate once
+        # AIUsage.Core.Tests is added. Left in now so the workflow doesn't need editing later.
+        run: |
+          if (Test-Path "tests") {
+            dotnet test AIUsage.sln --configuration Release --no-build
+          } else {
+            Write-Host "No test project yet — skipping."
+          }
+        shell: pwsh
