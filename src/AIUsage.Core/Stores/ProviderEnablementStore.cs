@@ -35,6 +35,11 @@ public sealed class ProviderEnablementStore
     /// FirstRunSeeder can tell a fresh store apart from one the user has already touched.</summary>
     public HashSet<string>? EnabledIds => _enabledIds is null ? null : new HashSet<string>(_enabledIds);
 
+    /// <summary>Every provider id this install has ever registered via <see cref="RegisterKnownProviders"/>.
+    /// Empty means the install predates that tracking — NewProviderSeeder uses this to distinguish
+    /// "genuinely new provider" from "this store never tracked known ids at all".</summary>
+    public HashSet<string> KnownIds => new(_knownIds);
+
     public bool IsEnabled(string id) => _enabledIds is null || _enabledIds.Contains(id);
 
     public void SetEnabled(bool enabled, string id)

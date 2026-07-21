@@ -44,7 +44,8 @@ public sealed class AppContainer : IDisposable
         Enablement.ProviderEnabled += id => DataStore.ClearFailureBackoff(id);
         Enablement.Changed += () => DataStore.ProviderEnablementDidChange();
 
-        _seedTask = FirstRunSeeder.SeedIfNeeded(isFreshInstall, _providers, Enablement);
+        _seedTask = FirstRunSeeder.SeedIfNeeded(isFreshInstall, _providers, Enablement)
+            ?? NewProviderSeeder.ReconcileIfNeeded(_providers, Enablement);
 
         _refreshLoopTask = StartPeriodicRefresh(_refreshLoopCts.Token);
 
