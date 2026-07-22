@@ -44,7 +44,13 @@ app state) — no extra login. OpenRouter and Z.ai are the exceptions: you suppl
 
 ## Installation
 
-Download `AIUsage-Setup.exe` from the [latest release](https://github.com/LuigiElleBalotta/AIUsage.NET/releases/latest)
+**Winget** (pending review — see [microsoft/winget-pkgs#405974](https://github.com/microsoft/winget-pkgs/pull/405974)):
+
+```powershell
+winget install LuigiElleBalotta.AIUsageNET
+```
+
+**Or manually:** download `AIUsage-Setup.exe` from the [latest release](https://github.com/LuigiElleBalotta/AIUsage.NET/releases/latest)
 and run it — it installs to your user profile (no admin required) and adds a Start Menu shortcut. Not
 code-signed yet, so Windows SmartScreen will warn on first run (click "More info" → "Run anyway"); see
 [PORTING_NOTES.md](PORTING_NOTES.md) for what's left to do there.
