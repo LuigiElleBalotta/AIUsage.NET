@@ -1,5 +1,13 @@
 # Kiro
 
+> **Temporarily disabled.** As of AIUsage.NET 0.4.1, this provider is not registered and does not
+> run — for anyone, new or existing install. Reactively refreshing an already-rejected AWS SSO/OIDC
+> refresh token was found to eventually force a logout in the live Kiro IDE session itself, not just
+> in AIUsage.NET, even after two prior fixes narrowed the failure window. Tracked in
+> [GitHub issue #8](https://github.com/LuigiElleBalotta/AIUsage.NET/issues/8) — the rest of this page
+> describes the provider as designed; it will come back once the underlying AWS token-lifecycle
+> interaction is understood well enough not to risk your Kiro login.
+
 Tracks your Kiro subscription usage using the login you already have from the Kiro IDE or `kiro-cli`.
 
 ## What it tracks

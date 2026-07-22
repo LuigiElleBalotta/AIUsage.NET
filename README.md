@@ -28,6 +28,11 @@ charts, local HTTP API, code signing, multi-account support, iCloud-equivalent s
 - **Cursor** — credits, total/auto/API usage, requests, on-demand, per-day spend
 - **Devin** — weekly and daily quota, extra usage balance
 - **Grok** — weekly shared pool, pay-as-you-go, local daily spend
+
+> **Kiro** was added in 0.3.0 and disabled in 0.4.1 pending a fix for a bug that could force a
+> logout in the live Kiro IDE session — see
+> [docs/providers/kiro.md](docs/providers/kiro.md) and
+> [issue #8](https://github.com/LuigiElleBalotta/AIUsage.NET/issues/8).
 - **OpenCode** — Go session/weekly/monthly caps, local daily spend
 - **OpenRouter** — credit balance, daily/weekly/monthly spend (API key)
 - **Z.ai** — session, weekly, web-search quotas (API key)

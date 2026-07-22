@@ -6,7 +6,6 @@ using AIUsage.Core.Providers.Copilot;
 using AIUsage.Core.Providers.Cursor;
 using AIUsage.Core.Providers.Devin;
 using AIUsage.Core.Providers.Grok;
-using AIUsage.Core.Providers.Kiro;
 using AIUsage.Core.Providers.OpenCode;
 using AIUsage.Core.Providers.OpenRouter;
 using AIUsage.Core.Providers.ZAI;
@@ -40,7 +39,11 @@ public static class ProviderCatalog
         providers.Add(new CopilotProvider());
         providers.Add(new DevinProvider());
         providers.Add(new GrokProvider());
-        providers.Add(new KiroProvider());
+        // KiroProvider intentionally NOT registered — temporarily disabled for everyone (new and
+        // existing installs) pending a fix for a forced-logout bug that reached the live Kiro IDE
+        // session, not just this app's cached copy. See PORTING_NOTES.md and the tracking issue on
+        // GitHub. The provider's code (Providers/Kiro/) and its tests are left in place; only this
+        // registration is commented out, so re-enabling it later is a one-line change once fixed.
         providers.Add(new OpenCodeProvider());
         providers.Add(new OpenRouterProvider());
         providers.Add(new ZAIProvider());
