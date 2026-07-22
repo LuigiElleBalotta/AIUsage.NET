@@ -111,27 +111,43 @@ public static class KiroUsageMapper
 
     /// <summary>Overage pricing lives on the same breakdown entry as the base usage/limit — it only
     /// applies once that limit is exceeded, and only when the account has pay-as-you-go turned on.
-    /// Skips entries that carry no overage fields at all (most accounts don't have overage capability).</summary>
+    /// Skips entries that carry no overage fields at all (most accounts don't have overage capability).
+    ///
+    /// `currentOverages` is a raw usage count in the same unit as the base breakdown (e.g. requests
+    /// past the included limit) — it is *unpriced*, despite its name suggesting an accrued dollar
+    /// figure. Verified against a real account: `currentOverages=740.1`, `overageRate=0.04` matched
+    /// a real billed overage of $29.60 (740.1 × 0.04 = 29.604), not $740.10. `overageCap` is the
+    /// actual dollar cap. So the dollar amount spent is `currentOverages * overageRate`, never
+    /// `currentOverages` alone.</summary>
     private static MetricLine? MapOverage(JsonElement breakdown, string? overageStatus)
     {
         var cap = ProviderParse.Number(GetOrNull(breakdown, "overageCap"));
         var rate = ProviderParse.Number(GetOrNull(breakdown, "overageRate"));
-        var current = ProviderParse.Number(GetOrNull(breakdown, "currentOverages"));
-        if (cap is null && rate is null && current is null) return null;
+        var units = ProviderParse.Number(GetOrNull(breakdown, "currentOverages"));
+        if (cap is null && rate is null && units is null) return null;
 
         if (overageStatus != "ENABLED")
         {
             return new MetricLine.Badge(OverageLabel, "Disabled", "#a3a3a3");
         }
 
-        if (cap is { } capValue && capValue > 0)
+        var spent = units is { } u && rate is { } r ? u * r : (double?)null;
+
+        if (cap is { } capValue && capValue > 0 && spent is { } spentValue)
         {
-            return new MetricLine.Progress(OverageLabel, current ?? 0, capValue, ProgressFormat.DollarsValue);
+            return new MetricLine.Progress(OverageLabel, spentValue, capValue, ProgressFormat.DollarsValue);
         }
 
-        // Enabled but no declared cap: report the accrued spend as an unbounded balance instead of a
-        // meter with nothing to divide by.
-        return new MetricLine.Badge(OverageLabel, Formatters.Currency(current ?? 0) + " spent", "#22c55e");
+        if (spent is { } spentOnly)
+        {
+            // Enabled but no declared cap: report the accrued spend as an unbounded balance instead
+            // of a meter with nothing to divide by.
+            return new MetricLine.Badge(OverageLabel, Formatters.Currency(spentOnly) + " spent", "#22c55e");
+        }
+
+        // Enabled, but missing the rate needed to price currentOverages into dollars — surface that
+        // overage is on without fabricating a number from unpriced units.
+        return new MetricLine.Badge(OverageLabel, "Enabled", "#22c55e");
     }
 
     private static string RequestSuffix(string? unit) => unit switch

@@ -85,13 +85,16 @@ public class KiroUsageMapperTests
     }
 
     [Fact]
-    public void MapUsageResponse_OverageEnabledWithCap_ProducesDollarProgressLine()
+    public void MapUsageResponse_OverageEnabledWithCap_PricesUnitsByRate()
     {
+        // Regression test for a unit-conversion bug found against a real account:
+        // currentOverages=740.1, overageRate=0.04 must price to $29.60 spent (740.1 * 0.04), not be
+        // shown as "$740.10 spent" — currentOverages is a raw usage count, not already in dollars.
         var json = """
         {
           "overageConfiguration": { "overageStatus": "ENABLED" },
           "usageBreakdownList": [
-            { "currentUsage": 0, "usageLimit": 50, "overageCap": 20, "overageRate": 0.04, "currentOverages": 3.5 }
+            { "currentUsage": 0, "usageLimit": 50, "overageCap": 100, "overageRate": 0.04, "currentOverages": 740.1 }
           ]
         }
         """;
@@ -100,18 +103,18 @@ public class KiroUsageMapperTests
         var mapped = KiroUsageMapper.MapUsageResponse(response, Now);
 
         var overage = Assert.IsType<MetricLine.Progress>(mapped.Lines.Single(l => l.Label == KiroUsageMapper.OverageLabel));
-        Assert.Equal(3.5, overage.Used);
-        Assert.Equal(20, overage.Limit);
+        Assert.Equal(29.604, overage.Used, precision: 3);
+        Assert.Equal(100, overage.Limit);
         Assert.Equal(ProgressFormat.DollarsValue, overage.Format);
     }
 
     [Fact]
-    public void MapUsageResponse_OverageEnabledWithoutCap_ProducesSpentBadge()
+    public void MapUsageResponse_OverageEnabledWithoutCap_ProducesPricedSpentBadge()
     {
         var json = """
         {
           "overageConfiguration": { "overageStatus": "ENABLED" },
-          "usageBreakdownList": [ { "currentUsage": 0, "usageLimit": 50, "overageRate": 0.04, "currentOverages": 7 } ]
+          "usageBreakdownList": [ { "currentUsage": 0, "usageLimit": 50, "overageRate": 0.04, "currentOverages": 175 } ]
         }
         """;
         var response = HttpResponseFixture.Json(json);
@@ -121,6 +124,23 @@ public class KiroUsageMapperTests
         var badge = Assert.IsType<MetricLine.Badge>(mapped.Lines.Single(l => l.Label == KiroUsageMapper.OverageLabel));
         Assert.Equal("$7.00 spent", badge.BadgeText);
         Assert.Equal("#22c55e", badge.ColorHex);
+    }
+
+    [Fact]
+    public void MapUsageResponse_OverageEnabledWithoutRate_CannotPriceUnits_ShowsEnabledBadge()
+    {
+        var json = """
+        {
+          "overageConfiguration": { "overageStatus": "ENABLED" },
+          "usageBreakdownList": [ { "currentUsage": 0, "usageLimit": 50, "currentOverages": 175 } ]
+        }
+        """;
+        var response = HttpResponseFixture.Json(json);
+
+        var mapped = KiroUsageMapper.MapUsageResponse(response, Now);
+
+        var badge = Assert.IsType<MetricLine.Badge>(mapped.Lines.Single(l => l.Label == KiroUsageMapper.OverageLabel));
+        Assert.Equal("Enabled", badge.BadgeText);
     }
 
     [Fact]

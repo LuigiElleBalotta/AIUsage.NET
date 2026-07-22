@@ -69,22 +69,13 @@ public sealed class KiroProvider : IProviderRuntime
 
     private async Task<ProviderSnapshot> ProbeAsync(KiroAuthState authState, CancellationToken cancellationToken)
     {
-        if (AuthStore.NeedsRefresh(authState, _now) && !string.IsNullOrEmpty(authState.RefreshToken))
-        {
-            await RefreshAccessTokenAsync(authState).ConfigureAwait(false);
-        }
-
         var profileArn = await EnsureProfileArnAsync(authState).ConfigureAwait(false);
         var region = KiroAuthStore.DataPlaneRegion(authState);
 
         var response = await ProviderAuthRetry.FetchAsync(
             authState.AccessToken,
             token => UsageClient.FetchUsageLimitsAsync(token, region, profileArn),
-            async () =>
-            {
-                await RefreshAccessTokenAsync(authState).ConfigureAwait(false);
-                return authState.AccessToken;
-            },
+            () => ResolveFreshAccessTokenAsync(authState),
             () => new KiroUsageError(KiroUsageErrorKind.ConnectionFailed),
             () => new KiroAuthError(KiroAuthErrorKind.SessionExpired)
         ).ConfigureAwait(false);
@@ -137,6 +128,48 @@ public sealed class KiroProvider : IProviderRuntime
         }
     }
 
+    /// <summary>Called only after a real 401/403 from the usage API — Kiro never refreshes
+    /// proactively on a near-expiry timer. The Kiro IDE / kiro-cli own this OAuth session and rotate
+    /// its single-use refresh token in the background on their own schedule; a proactive refresh here
+    /// raced that rotation in practice (confirmed against real credentials: this app's own 5-minute
+    /// pre-expiry refresh collided with the IDE's, AWS treated the loser as token reuse and revoked
+    /// the whole family, forcing a re-login in the IDE too — see PORTING_NOTES.md). So: first re-read
+    /// the live source in case the owning app already rotated it, and only fall back to calling the
+    /// refresh endpoint ourselves when the on-disk token is still the one that just failed.</summary>
+    private async Task<string> ResolveFreshAccessTokenAsync(KiroAuthState authState)
+    {
+        var staleToken = authState.AccessToken;
+        var live = ReloadLiveAuth(authState.Source);
+        if (live is not null && live.AccessToken != staleToken)
+        {
+            CopyLiveState(live, authState);
+            return authState.AccessToken;
+        }
+
+        await RefreshAccessTokenAsync(authState).ConfigureAwait(false);
+        return authState.AccessToken;
+    }
+
+    private KiroAuthState? ReloadLiveAuth(KiroAuthSource source) => source switch
+    {
+        KiroAuthSource.DesktopFile => AuthStore.LoadDesktopAuth(),
+        KiroAuthSource.CliDatabase => AuthStore.LoadCliAuth(),
+        _ => null
+    };
+
+    private static void CopyLiveState(KiroAuthState live, KiroAuthState target)
+    {
+        target.AccessToken = live.AccessToken;
+        target.RefreshToken = live.RefreshToken;
+        target.ProfileArn = live.ProfileArn;
+        target.SsoRegion = live.SsoRegion;
+        target.ExpiresAt = live.ExpiresAt;
+        target.ClientId = live.ClientId;
+        target.ClientSecret = live.ClientSecret;
+    }
+
+    /// <summary>Calls Kiro's own refresh endpoint. Only reached when the live source on disk still
+    /// carries the same (now-rejected) access token, meaning nobody else has rotated it yet.</summary>
     private async Task RefreshAccessTokenAsync(KiroAuthState authState)
     {
         var refreshToken = authState.RefreshToken;

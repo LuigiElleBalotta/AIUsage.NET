@@ -368,9 +368,4 @@ public sealed class KiroAuthStore
         }
     }
 
-    public bool NeedsRefresh(KiroAuthState state, Func<DateTimeOffset> now)
-    {
-        if (state.ExpiresAt is not { } expiresAt) return false;
-        return (expiresAt - now()) <= TimeSpan.FromMinutes(5);
-    }
 }

@@ -15,8 +15,11 @@ provider name.
 
 Extra Usage shows differently depending on your account's overage setting:
 
-- **Overage on, with a spending cap** — a dollar meter (spent vs. cap).
-- **Overage on, no cap declared** — a plain "$X.XX spent" badge; there's nothing to divide a meter by.
+- **Overage on, with a spending cap and a rate** — a dollar meter (spent vs. cap).
+- **Overage on, no cap declared but a rate is known** — a plain "$X.XX spent" badge; there's nothing
+  to divide a meter by.
+- **Overage on, but Kiro didn't send a rate** — an "Enabled" badge; there's no way to price the
+  accrued units into a dollar figure without one.
 - **Overage off, or the account isn't overage-capable** — a "Disabled" badge, and no charge risk.
 
 ## Where credentials come from
@@ -48,13 +51,23 @@ account's usage actually lives) can differ — on this maintainer's own account,
 derived from the resolved profile ARN, falling back to `us-east-1` only when no profile ARN is known
 yet — never the SSO region. The SSO region is used exclusively to reach the token-refresh endpoint.
 
+### AIUsage.NET never refreshes your token proactively
+
+Kiro's refresh tokens (both the desktop and `kiro-cli` flavors) are AWS SSO/OIDC and single-use:
+redeeming one invalidates it and issues a new one. The Kiro IDE / `kiro-cli` already rotate their
+own refresh token in the background as it nears expiry — if AIUsage.NET also refreshed proactively
+on its own timer, the two could race, and AWS treats the loser as token reuse and revokes the whole
+token family, forcing you to log in again **in Kiro itself**, not just in AIUsage.NET. This was
+reproduced against a real account (see `PORTING_NOTES.md`) and is why AIUsage.NET only refreshes
+reactively, after a real 401/403 from the usage API — and even then it re-reads the credential file
+or database first, in case Kiro already rotated it, before ever calling the refresh endpoint itself.
+
 ## Troubleshooting
 
 - **"Not logged in"** — sign in to the Kiro IDE, or run `kiro-cli login`, then refresh.
-- **"Session expired"** — both the desktop and CLI refresh tokens are single-use; if a different
-  tool (or a second copy of AIUsage.NET) already redeemed the refresh token this account had stored,
-  the next refresh attempt fails and the affected app should show a login prompt on its own next
-  launch. Sign in again with whichever surface you use day to day.
+- **"Session expired"** — the refresh token AIUsage.NET had on file was rejected and it wasn't able
+  to recover a fresher one from disk either. Sign in again with whichever surface you use day to
+  day (Kiro IDE or `kiro-cli`).
 - **Bonus Credits missing** — not every account has a bonus grant; the row simply doesn't appear
   when Kiro's response carries none.
 
@@ -69,8 +82,12 @@ against the CodeWhisperer REST host in `us-east-1`
 `usageBreakdownList` (per-resource `currentUsage`/`usageLimit`, plus any `bonuses`) and
 `subscriptionInfo.subscriptionTitle` map directly to the Requests meter, Bonus Credits row, and plan
 name. The same breakdown entries carry `overageCap`/`overageRate`/`currentOverages`, gated by
-`overageConfiguration.overageStatus`, which map to the Extra Usage row. When no profile ARN is
-cached yet, `POST /ListAvailableProfiles` resolves one before the usage call. Token refresh is
-desktop-flavored (`POST https://prod.{region}.auth.desktop.kiro.dev/refreshToken` with just a
-refresh token) or AWS SSO OIDC (`POST https://oidc.{region}.amazonaws.com/token` with
-`clientId`/`clientSecret`/`refreshToken`), matching whichever credential source answered.
+`overageConfiguration.overageStatus`, which map to the Extra Usage row — **`currentOverages` is an
+unpriced usage count** (verified against a real account: `currentOverages=740.1` with
+`overageRate=0.04` billed as $29.60, i.e. `740.1 × 0.04`, not $740.10), so AIUsage.NET always
+multiplies it by `overageRate` before showing a dollar figure; it never displays `currentOverages`
+directly. When no profile ARN is cached yet, `POST /ListAvailableProfiles` resolves one before the
+usage call. Token refresh is desktop-flavored (`POST https://prod.{region}.auth.desktop.kiro.dev/refreshToken`
+with just a refresh token) or AWS SSO OIDC (`POST https://oidc.{region}.amazonaws.com/token` with
+`clientId`/`clientSecret`/`refreshToken`), matching whichever credential source answered — and is
+only ever called reactively, after a real 401/403 (see above).
