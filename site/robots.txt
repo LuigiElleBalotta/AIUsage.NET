@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://luigiellebalotta.github.io/AIUsage.NET/sitemap.xml

@@ -5,8 +5,49 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>AIUsage.NET — AI usage tracking for your Windows tray</title>
 <meta name="description" content="Track Claude, Codex, Cursor, Copilot, Grok, and more AI coding subscriptions from your Windows system tray. Free, open source, .NET 8.">
+<meta name="robots" content="index, follow">
+<meta name="theme-color" content="#14151A">
+<link rel="canonical" href="https://luigiellebalotta.github.io/AIUsage.NET/">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="styles.css">
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js" defer></script>
+<script src="site.js" defer></script>
+
+<!-- Open Graph -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="AIUsage.NET">
+<meta property="og:title" content="AIUsage.NET — AI usage tracking for your Windows tray">
+<meta property="og:description" content="Track Claude, Codex, Cursor, Copilot, Grok, and more AI coding subscriptions from your Windows system tray. Free, open source, .NET 8.">
+<meta property="og:url" content="https://luigiellebalotta.github.io/AIUsage.NET/">
+<meta property="og:image" content="https://luigiellebalotta.github.io/AIUsage.NET/screenshots/UI_0.4.1.png">
+
+<!-- Twitter -->
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="AIUsage.NET — AI usage tracking for your Windows tray">
+<meta name="twitter:description" content="Track Claude, Codex, Cursor, Copilot, Grok, and more AI coding subscriptions from your Windows system tray. Free, open source, .NET 8.">
+<meta name="twitter:image" content="https://luigiellebalotta.github.io/AIUsage.NET/screenshots/UI_0.4.1.png">
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "AIUsage.NET",
+  "operatingSystem": "Windows 10+",
+  "applicationCategory": "UtilitiesApplication",
+  "description": "Track Claude, Codex, Cursor, Copilot, Grok, and more AI coding subscriptions from your Windows system tray. Free, open source, .NET 8.",
+  "url": "https://luigiellebalotta.github.io/AIUsage.NET/",
+  "downloadUrl": "https://github.com/LuigiElleBalotta/AIUsage.NET/releases/latest",
+  "sameAs": ["https://github.com/LuigiElleBalotta/AIUsage.NET"],
+  "image": "https://luigiellebalotta.github.io/AIUsage.NET/screenshots/UI_0.4.1.png",
+  "license": "https://github.com/LuigiElleBalotta/AIUsage.NET/blob/main/LICENSE",
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "USD"
+  }
+}
+</script>
 </head>
 <body>
 
@@ -29,66 +70,66 @@
 
   <section class="hero">
     <div class="wrap hero-inner">
-      <p class="eyebrow">Windows tray app · Free · Open source</p>
-      <h1>Know exactly how much of your AI coding plans you have left.</h1>
-      <p class="hero-sub">
+      <p class="eyebrow" data-hero-item>Windows tray app · Free · Open source</p>
+      <h1 data-hero-item>Know exactly how much of your AI coding plans you have left.</h1>
+      <p class="hero-sub" data-hero-item>
         AIUsage.NET sits quietly in your system tray and shows session limits, weekly quotas,
         credits, and spend for the AI coding tools you already pay for — all in one popup, updated
         every five minutes.
       </p>
-      <div class="cta-row">
+      <div class="cta-row" data-hero-item>
         <a class="btn btn-primary" href="https://github.com/LuigiElleBalotta/AIUsage.NET/releases/latest">Download for Windows</a>
         <a class="btn btn-ghost" href="https://github.com/LuigiElleBalotta/AIUsage.NET">View on GitHub</a>
       </div>
-      <p class="hero-note">Windows 10+ · Installer + auto-updates via Velopack · MIT License</p>
+      <p class="hero-note" data-hero-item>Windows 10+ · Installer + auto-updates via Velopack · MIT License</p>
     </div>
   </section>
 
   <section class="mock-section">
     <div class="wrap">
-      <div class="mock-window mock-window--screenshot">
+      <div class="mock-window mock-window--screenshot" data-hero-item data-float>
         <img class="mock-screenshot" src="screenshots/UI_0.4.1.png" alt="AIUsage.NET tray dashboard showing live Claude and Codex usage, version 0.4.1" width="380">
       </div>
-      <p class="mock-caption">Real screenshot, AIUsage.NET 0.4.1.</p>
+      <p class="mock-caption" data-hero-item>Real screenshot, AIUsage.NET 0.4.1.</p>
     </div>
   </section>
 
-  <section id="providers" class="providers-section">
+  <section id="providers" class="providers-section" data-reveal>
     <div class="wrap">
       <h2>Built for the AI coding stack you actually use</h2>
       <p class="section-sub">One provider is a small, self-contained module. Adding a new one is a documented, four-step process — see <a href="https://github.com/LuigiElleBalotta/AIUsage.NET/blob/main/docs/adding-a-provider.md">Adding a Provider</a>.</p>
       <div class="provider-grid">
-        <div class="provider-tile"><img class="provider-icon" src="icons/claude.svg" alt=""><span>Claude</span></div>
-        <div class="provider-tile"><img class="provider-icon" src="icons/codex.svg" alt=""><span>Codex</span></div>
-        <div class="provider-tile"><img class="provider-icon" src="icons/cursor.svg" alt=""><span>Cursor</span></div>
-        <div class="provider-tile"><img class="provider-icon" src="icons/copilot.svg" alt=""><span>Copilot</span></div>
-        <div class="provider-tile"><img class="provider-icon" src="icons/antigravity.svg" alt=""><span>Antigravity</span></div>
-        <div class="provider-tile"><img class="provider-icon" src="icons/devin.svg" alt=""><span>Devin</span></div>
-        <div class="provider-tile"><img class="provider-icon" src="icons/grok.svg" alt=""><span>Grok</span></div>
-        <div class="provider-tile"><img class="provider-icon" src="icons/opencode.svg" alt=""><span>OpenCode</span></div>
-        <div class="provider-tile"><img class="provider-icon" src="icons/openrouter.svg" alt=""><span>OpenRouter</span></div>
-        <div class="provider-tile"><img class="provider-icon" src="icons/zai.svg" alt=""><span>Z.ai</span></div>
+        <div class="provider-tile" data-reveal-item><img class="provider-icon" src="icons/claude.svg" alt=""><span>Claude</span></div>
+        <div class="provider-tile" data-reveal-item><img class="provider-icon" src="icons/codex.svg" alt=""><span>Codex</span></div>
+        <div class="provider-tile" data-reveal-item><img class="provider-icon" src="icons/cursor.svg" alt=""><span>Cursor</span></div>
+        <div class="provider-tile" data-reveal-item><img class="provider-icon" src="icons/copilot.svg" alt=""><span>Copilot</span></div>
+        <div class="provider-tile" data-reveal-item><img class="provider-icon" src="icons/antigravity.svg" alt=""><span>Antigravity</span></div>
+        <div class="provider-tile" data-reveal-item><img class="provider-icon" src="icons/devin.svg" alt=""><span>Devin</span></div>
+        <div class="provider-tile" data-reveal-item><img class="provider-icon" src="icons/grok.svg" alt=""><span>Grok</span></div>
+        <div class="provider-tile" data-reveal-item><img class="provider-icon" src="icons/opencode.svg" alt=""><span>OpenCode</span></div>
+        <div class="provider-tile" data-reveal-item><img class="provider-icon" src="icons/openrouter.svg" alt=""><span>OpenRouter</span></div>
+        <div class="provider-tile" data-reveal-item><img class="provider-icon" src="icons/zai.svg" alt=""><span>Z.ai</span></div>
       </div>
       <p class="section-note">Everything is plugin-driven — more providers land as pull requests come in.</p>
     </div>
   </section>
 
-  <section class="features-section">
+  <section class="features-section" data-reveal>
     <div class="wrap">
       <div class="feature-grid">
-        <div class="feature">
+        <div class="feature" data-reveal-item>
           <h3>Every tool, one glance</h3>
           <p>All your AI coding subscriptions in a single popup. No more tab-hopping between dashboards to check if you're about to hit a limit.</p>
         </div>
-        <div class="feature">
+        <div class="feature" data-reveal-item>
           <h3>Lives in your tray</h3>
           <p>Click the tray icon, see where you stand, close it. Cached values show instantly; a background refresh keeps them current every five minutes.</p>
         </div>
-        <div class="feature">
+        <div class="feature" data-reveal-item>
           <h3>Know before you run out</h3>
           <p>Session and weekly windows, credit balances, and local spend estimates — colored by severity so a tight limit stands out before it's too late.</p>
         </div>
-        <div class="feature">
+        <div class="feature" data-reveal-item>
           <h3>Reads what's already there</h3>
           <p>No pasting tokens. AIUsage.NET reads the credentials your CLI or editor already stored — Windows Credential Manager, local auth files, app state databases.</p>
         </div>
@@ -96,7 +137,7 @@
     </div>
   </section>
 
-  <section id="api" class="api-section">
+  <section id="api" class="api-section" data-reveal>
     <div class="wrap">
       <div class="api-grid">
         <div class="api-copy">
@@ -113,7 +154,6 @@
           </p>
         </div>
         <pre class="api-code"><code>{
-  "schema": "openusage.limits.v1",
   "generatedAt": "2026-07-21T13:11:52Z",
   "providers": {
     "claude": {
@@ -141,7 +181,7 @@
     </div>
   </section>
 
-  <section class="oss-section">
+  <section class="oss-section" data-reveal>
     <div class="wrap oss-inner">
       <h2>Free, open source, and yours to change</h2>
       <p>
@@ -155,7 +195,7 @@
     </div>
   </section>
 
-  <section class="final-cta">
+  <section class="final-cta" data-reveal>
     <div class="wrap final-cta-inner">
       <h2>Stop guessing where your limits are.</h2>
       <a class="btn btn-primary btn-lg" href="https://github.com/LuigiElleBalotta/AIUsage.NET/releases/latest">Download AIUsage.NET</a>
