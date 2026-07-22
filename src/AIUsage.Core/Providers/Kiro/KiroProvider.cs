@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using AIUsage.Core.Models;
 using AIUsage.Core.Support;
 
@@ -16,6 +18,16 @@ public sealed class KiroProvider : IProviderRuntime
     public KiroAuthStore AuthStore { get; }
     public KiroUsageClient UsageClient { get; }
     private readonly Func<DateTimeOffset> _now;
+
+    /// <summary>Fingerprint (SHA-256, never the raw token) of the last refresh token AWS actually
+    /// rejected over the network, per credential source. Once set, a refresh attempt carrying the
+    /// same fingerprint fails immediately instead of hitting the network again — repeatedly retrying
+    /// a refresh token AWS already rejected (once every 5-minute poll, indefinitely) was observed to
+    /// eventually invalidate the live Kiro IDE session too, not just this app's cached copy (see
+    /// PORTING_NOTES.md). In-memory only: a fresh process (e.g. after the user signs in again) always
+    /// gets a clean slate, and a token rotated by the owning app on disk produces a new fingerprint
+    /// that is retried normally.</summary>
+    private readonly Dictionary<string, string> _knownDeadRefreshTokens = new();
 
     public KiroProvider(KiroAuthStore? authStore = null, KiroUsageClient? usageClient = null, Func<DateTimeOffset>? now = null)
     {
@@ -135,7 +147,10 @@ public sealed class KiroProvider : IProviderRuntime
     /// pre-expiry refresh collided with the IDE's, AWS treated the loser as token reuse and revoked
     /// the whole family, forcing a re-login in the IDE too — see PORTING_NOTES.md). So: first re-read
     /// the live source in case the owning app already rotated it, and only fall back to calling the
-    /// refresh endpoint ourselves when the on-disk token is still the one that just failed.</summary>
+    /// refresh endpoint ourselves when the on-disk token is still the one that just failed — and even
+    /// then, never retry a refresh token AWS has already told us is dead (see
+    /// <see cref="_knownDeadRefreshTokens"/>; repeatedly retrying it every 5-minute poll was observed
+    /// to eventually take down the live IDE session too, not just this app's copy).</summary>
     private async Task<string> ResolveFreshAccessTokenAsync(KiroAuthState authState)
     {
         var staleToken = authState.AccessToken;
@@ -146,9 +161,46 @@ public sealed class KiroProvider : IProviderRuntime
             return authState.AccessToken;
         }
 
-        await RefreshAccessTokenAsync(authState).ConfigureAwait(false);
+        var sourceKey = SourceKey(authState.Source);
+        if (!string.IsNullOrEmpty(authState.RefreshToken))
+        {
+            var fingerprint = Fingerprint(authState.RefreshToken!);
+            if (_knownDeadRefreshTokens.TryGetValue(sourceKey, out var deadFingerprint) && deadFingerprint == fingerprint)
+            {
+                AppLog.Warn(LogTag.Plugin("kiro"), "refresh token already known to be rejected by AWS; not retrying over the network");
+                throw new KiroAuthError(KiroAuthErrorKind.SessionExpired);
+            }
+        }
+
+        var attemptedToken = authState.RefreshToken;
+        try
+        {
+            await RefreshAccessTokenAsync(authState).ConfigureAwait(false);
+        }
+        catch (KiroAuthError)
+        {
+            // AWS explicitly rejected this refresh token (a KiroAuthError here means the refresh
+            // endpoint answered with a real rejection — non-2xx or an unparseable payload; a
+            // transport/connection failure throws KiroUsageError instead and is retried normally
+            // next cycle). Remember the fingerprint so the next refresh cycle doesn't hit the network
+            // with the same dead token again.
+            if (attemptedToken is { Length: > 0 })
+            {
+                _knownDeadRefreshTokens[sourceKey] = Fingerprint(attemptedToken);
+            }
+            throw;
+        }
         return authState.AccessToken;
     }
+
+    private static string SourceKey(KiroAuthSource source) => source switch
+    {
+        KiroAuthSource.DesktopFile f => $"desktop:{f.Path}",
+        KiroAuthSource.CliDatabase db => $"cli:{db.Path}:{db.TokenKey}",
+        _ => "unknown"
+    };
+
+    private static string Fingerprint(string value) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
 
     private KiroAuthState? ReloadLiveAuth(KiroAuthSource source) => source switch
     {

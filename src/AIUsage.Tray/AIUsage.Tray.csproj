@@ -15,6 +15,17 @@
 
   <ItemGroup>
     <ProjectReference Include="..\AIUsage.Core\AIUsage.Core.csproj" />
+    <PackageReference Include="Velopack" Version="1.2.0" />
+  </ItemGroup>
+
+  <!-- Custom entry point (Program.cs) instead of WPF's default App.xaml-generated Main(), per
+       Velopack's recommendation: VelopackApp.Build().Run() should run before any WPF startup
+       overhead, since it may exit the process immediately during install/update hooks. -->
+  <ItemGroup>
+    <ApplicationDefinition Remove="App.xaml" />
+    <Page Include="App.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
   </ItemGroup>
 
   <ItemGroup Condition="Exists('Resources\aiusage.ico')">

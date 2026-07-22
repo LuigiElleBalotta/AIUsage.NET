@@ -1,20 +1,26 @@
 #!/usr/bin/env pwsh
 <#
 .SYNOPSIS
-    Builds a distributable AIUsage.NET release: publishes the tray app and CLI (self-contained,
-    single-file, win-x64) and zips the result. Windows counterpart of the Swift edition's
-    script/release.sh — no notarization or DMG step exists on Windows; code signing (signtool) is
-    deliberately left out for now (see PORTING_NOTES.md: packaging/signing is future work, not yet
-    needed for a working port) and can be added here once a certificate is available.
+    Builds a distributable AIUsage.NET release using Velopack: publishes the tray app
+    self-contained, then packages it with `vpk pack` into an installer (Setup.exe), a portable
+    zip, and the delta-update feed files GitHub Releases serves to UpdateChecker on every future
+    launch. Windows counterpart of the Swift edition's script/release.sh — no notarization/DMG step
+    exists on Windows; code signing (signtool) is deliberately left out for now (see
+    PORTING_NOTES.md: packaging/signing is future work) and can be wired in via `vpk pack
+    --signParams` once a certificate is available.
+
+    The CLI (`aiusage.exe`) is still published and zipped separately alongside the Velopack output,
+    since it's a standalone tool most users invoke from a terminal, not something Velopack should
+    manage the lifecycle of.
 
 .PARAMETER Version
-    Version string stamped into the output zip name, e.g. 0.1.0. Required.
+    Version string stamped into the Velopack package and the CLI zip name, e.g. 0.3.0. Required.
 
 .PARAMETER Runtime
     Target RID. Default: win-x64.
 
 .EXAMPLE
-    script/release.ps1 -Version 0.1.0
+    script/release.ps1 -Version 0.3.0
 #>
 param(
     [Parameter(Mandatory = $true)]
@@ -26,45 +32,63 @@ param(
 $ErrorActionPreference = "Stop"
 $RootDir = Split-Path -Parent $PSScriptRoot
 $DistDir = Join-Path $RootDir "dist"
-$StageDir = Join-Path $DistDir "AIUsage-$Version"
+$PublishDir = Join-Path $DistDir "publish-$Version"
+$ReleasesDir = Join-Path $DistDir "Releases"
 
 Write-Host "==> cleaning $DistDir"
-if (Test-Path $StageDir) { Remove-Item -Recurse -Force $StageDir }
-New-Item -ItemType Directory -Path $StageDir | Out-Null
+if (Test-Path $PublishDir) { Remove-Item -Recurse -Force $PublishDir }
+New-Item -ItemType Directory -Path $PublishDir | Out-Null
 
 $trayProject = Join-Path $RootDir "src\AIUsage.Tray\AIUsage.Tray.csproj"
 $cliProject = Join-Path $RootDir "src\AIUsage.Cli\AIUsage.Cli.csproj"
 
-Write-Host "==> publishing tray app ($Runtime, self-contained, single-file, version $Version)"
+# Velopack needs the app's individual files (not a single self-extracting exe) to compute delta
+# patches between versions, so PublishSingleFile is intentionally NOT used here for the tray app
+# (unlike the CLI below, which Velopack does not manage).
+Write-Host "==> publishing tray app ($Runtime, self-contained, version $Version)"
 dotnet publish $trayProject -c Release -r $Runtime --self-contained true `
-    -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:Version=$Version `
-    -o (Join-Path $StageDir "tray")
+    -p:Version=$Version -o (Join-Path $PublishDir "tray")
 if ($LASTEXITCODE -ne 0) { throw "Tray publish failed." }
 
 Write-Host "==> publishing CLI ($Runtime, self-contained, single-file, version $Version)"
+$cliStageDir = Join-Path $DistDir "cli-$Version"
+if (Test-Path $cliStageDir) { Remove-Item -Recurse -Force $cliStageDir }
 dotnet publish $cliProject -c Release -r $Runtime --self-contained true `
     -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:Version=$Version `
-    -o (Join-Path $StageDir "cli")
+    -o $cliStageDir
 if ($LASTEXITCODE -ne 0) { throw "CLI publish failed." }
 
-# AIUsage.exe (tray) at the stage root + aiusage.exe (CLI) kept in its own "cli" subfolder, mirroring
-# how the Swift release puts the app bundle's helper CLI under Contents/Helpers next to the main
-# binary. Deliberately NOT flattened into one folder: "AIUsage.exe" and "aiusage.exe" differ only by
-# case, and Windows' default NTFS case-insensitive lookup treats them as the SAME path — copying both
-# into one directory silently overwrites the first with the second (this bit a first pass at this
-# script). Keeping the CLI in its own subfolder sidesteps that collision entirely.
-Write-Host "==> staging release folder"
-Copy-Item (Join-Path $StageDir "tray\AIUsage.exe") $StageDir
-Remove-Item -Recurse -Force (Join-Path $StageDir "tray")
-# The CLI's own pdb/Resources copy also stays in cli\ - only its own process needs them, and keeping
-# them there (rather than merging into the stage root) avoids the tray's Resources being shadowed by
-# a second copy with the exact same relative path.
+$cliZipPath = Join-Path $DistDir "aiusage-cli-$Version-$Runtime.zip"
+if (Test-Path $cliZipPath) { Remove-Item $cliZipPath }
+Write-Host "==> zipping CLI: $cliZipPath"
+Compress-Archive -Path (Join-Path $cliStageDir "aiusage.exe") -DestinationPath $cliZipPath
 
-$zipPath = Join-Path $DistDir "AIUsage-$Version-$Runtime.zip"
-if (Test-Path $zipPath) { Remove-Item $zipPath }
-Write-Host "==> zipping $zipPath"
-Compress-Archive -Path (Join-Path $StageDir "*") -DestinationPath $zipPath
+# dnx requires the .NET 10 SDK; this project targets .NET 8, so vpk is installed as a regular
+# global tool instead (works from the .NET 8 SDK onward). Pinned to the same version as the
+# Velopack package reference in AIUsage.Tray.csproj / AIUsage.Core.csproj, per Velopack's own advice.
+$vpkVersion = "1.2.0"
+Write-Host "==> installing/checking vpk CLI tool $vpkVersion"
+$installedVpk = dotnet tool list -g | Select-String "^vpk\s"
+if (-not $installedVpk) {
+    dotnet tool install -g vpk --version $vpkVersion
+    if ($LASTEXITCODE -ne 0) { throw "Failed to install vpk global tool." }
+} elseif ($installedVpk -notmatch [regex]::Escape($vpkVersion)) {
+    dotnet tool update -g vpk --version $vpkVersion
+    if ($LASTEXITCODE -ne 0) { throw "Failed to update vpk global tool to $vpkVersion." }
+}
+
+Write-Host "==> packing Velopack release ($ReleasesDir)"
+if (Test-Path $ReleasesDir) { Remove-Item -Recurse -Force $ReleasesDir }
+vpk pack `
+    --packId AIUsage.NET `
+    --packVersion $Version `
+    --packDir (Join-Path $PublishDir "tray") `
+    --packTitle "AIUsage.NET" `
+    --mainExe AIUsage.exe `
+    --outputDir $ReleasesDir
+if ($LASTEXITCODE -ne 0) { throw "vpk pack failed." }
 
 Write-Host "==> done"
-Write-Host "    Zip: $zipPath"
+Write-Host "    Velopack release: $ReleasesDir (Setup.exe, portable zip, releases.win.json, ...)"
+Write-Host "    CLI zip: $cliZipPath"
 Write-Host "    NOTE: unsigned build. Code signing (signtool) is not yet wired up - see PORTING_NOTES.md."

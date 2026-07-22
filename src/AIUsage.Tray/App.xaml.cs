@@ -8,7 +8,10 @@ namespace AIUsage.Tray;
 /// <summary>
 /// Interaction logic for App.xaml. Composition root entry point: owns the AppContainer for the
 /// process lifetime and the tray/status-item controller. Direct counterpart of the Swift
-/// OpenUsageApp + AppDelegate pairing, minus Sparkle updates and the local HTTP API (not yet ported).
+/// OpenUsageApp + AppDelegate pairing, minus the local HTTP API (not yet ported). Auto-update is
+/// Velopack (see PORTING_NOTES.md) instead of Sparkle — the closest .NET equivalent, since Sparkle's
+/// signed-appcast model has no direct port. VelopackApp.Build().Run() itself lives in Program.cs's
+/// Main(), which runs before this class is even constructed — see that file for why.
 /// </summary>
 public partial class App : Application
 {

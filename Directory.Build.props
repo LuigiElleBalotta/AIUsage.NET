@@ -7,6 +7,6 @@
     momentarily out of sync.
   -->
   <PropertyGroup>
-    <Version>0.3.1</Version>
+    <Version>0.4.0</Version>
   </PropertyGroup>
 </Project>

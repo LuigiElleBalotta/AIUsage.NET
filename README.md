@@ -38,7 +38,17 @@ app state) — no extra login. OpenRouter and Z.ai are the exceptions: you suppl
 
 ## Installation
 
-No signed installer yet (see [Releasing](#releasing)). Build from source:
+Download `AIUsage-Setup.exe` from the [latest release](https://github.com/LuigiElleBalotta/AIUsage.NET/releases/latest)
+and run it — it installs to your user profile (no admin required) and adds a Start Menu shortcut. Not
+code-signed yet, so Windows SmartScreen will warn on first run (click "More info" → "Run anyway"); see
+[PORTING_NOTES.md](PORTING_NOTES.md) for what's left to do there.
+
+Once installed, the app checks for updates automatically (via [Velopack](https://velopack.io), reading
+this repo's GitHub Releases) and offers to download and install them from the tray menu — no manual
+zip download needed for future versions. A portable (no-installer) zip is also attached to each
+release if you'd rather not install it.
+
+To build from source instead:
 
 ```powershell
 git clone https://github.com/LuigiElleBalotta/AIUsage.NET.git
@@ -87,11 +97,14 @@ normalized data — see [docs/architecture.md](docs/architecture.md) and
 
 ## Releasing
 
-`script/release.ps1 -Version 0.1.0` publishes a self-contained, single-file `win-x64` build zipped
-under `dist/`. Pushing a `v*` tag runs the same build in CI and attaches the zip to a GitHub Release
-(see [.github/workflows/release.yml](.github/workflows/release.yml)). There is no code signing yet, so
-Windows SmartScreen will warn on first run — see [PORTING_NOTES.md](PORTING_NOTES.md) for what's left
-to do there.
+`script/release.ps1 -Version 0.3.1` publishes the tray app self-contained, then packages it with
+[Velopack](https://velopack.io)'s `vpk pack` into an installer, a portable zip, and the delta-update
+feed installed apps poll (`releases.win.json`); the CLI is published and zipped separately. Pushing a
+`v*` tag runs the same build in CI and publishes every asset to a GitHub Release (see
+[.github/workflows/release.yml](.github/workflows/release.yml)) — that release is also what
+`UpdateChecker` reads on every user's machine, so nothing else needs to be updated for auto-update to
+pick up a new version. There is no code signing yet, so Windows SmartScreen will warn on first run —
+see [PORTING_NOTES.md](PORTING_NOTES.md) for what's left to do there.
 
 ## Contributing
 

@@ -2,9 +2,11 @@ name: Release
 
 # Tag a version to ship it: `git tag v0.1.0 && git push origin v0.1.0`.
 # A tag with a pre-release suffix (e.g. v0.1.0-beta.1) publishes as a GitHub pre-release; a plain tag
-# (v0.1.0) publishes as "Latest". There is no auto-update feed yet (the Swift edition's Sparkle
-# appcast has no Windows equivalent ported — see PORTING_NOTES.md), so this workflow only builds and
-# publishes the release asset; it does not notarize, sign with a certificate, or update any feed.
+# (v0.1.0) publishes as "Latest". Auto-update is Velopack (see PORTING_NOTES.md), reading this repo's
+# GitHub Releases directly — every asset `vpk pack`/`vpk upload` produces (Setup.exe, portable zip,
+# releases.win.json, delta packages) must land on the release for installed apps to find the update,
+# which is what `vpk upload github --publish` below does. This workflow does not notarize or sign
+# with a certificate yet.
 on:
   push:
     tags: ["v*"]
@@ -44,17 +46,34 @@ jobs:
           "version=$version" >> $env:GITHUB_OUTPUT
           "prerelease=$prerelease" >> $env:GITHUB_OUTPUT
 
-      - name: Build and publish
+      - name: Build and pack
         shell: pwsh
         run: ./script/release.ps1 -Version "${{ steps.meta.outputs.version }}" -Runtime win-x64
 
       # NOTE: unsigned. Windows code signing (signtool + an Authenticode certificate) is not yet
       # wired up — see PORTING_NOTES.md "Prossimi passi". SmartScreen will warn on first run until
       # this is added.
+      #
+      # First create the GitHub Release with the CLI zip attached (softprops/action-gh-release), then
+      # `vpk upload github` adds the Velopack assets (Setup.exe, portable zip, releases.win.json,
+      # delta packages) to that SAME release via --merge — vpk create's own release step and
+      # softprops' are not run against two different releases for the same tag.
       - name: Publish to GitHub Releases
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.meta.outputs.tag }}
           name: AIUsage.NET ${{ steps.meta.outputs.version }}
           prerelease: ${{ steps.meta.outputs.prerelease }}
-          files: dist/AIUsage-${{ steps.meta.outputs.version }}-win-x64.zip
+          files: dist/aiusage-cli-${{ steps.meta.outputs.version }}-win-x64.zip
+
+      - name: Upload Velopack assets
+        shell: pwsh
+        run: |
+          vpk upload github `
+            --repoUrl https://github.com/${{ github.repository }} `
+            --token ${{ secrets.GITHUB_TOKEN }} `
+            --outputDir dist/Releases `
+            --publish `
+            --merge `
+            --releaseName "AIUsage.NET ${{ steps.meta.outputs.version }}" `
+            --tag ${{ steps.meta.outputs.tag }}

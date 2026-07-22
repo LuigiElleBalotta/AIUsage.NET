@@ -243,6 +243,8 @@ elaborati verranno rifiniti quando si costruirà la UI WPF e si vede cosa serve 
 
 `[BUG FIX — 0.3.0 → 0.3.1]` **Refresh proattivo causava un logout forzato ripetuto, anche nell'IDE Kiro stesso.** Il provider, come Codex/Claude/Grok, controllava se il token scadeva entro 5 minuti e lo rinnovava lui stesso via HTTP prima di chiamare `getUsageLimits`. Per Kiro questo è sbagliato: il refresh token AWS SSO/OIDC è a rotazione single-use, e l'IDE Kiro (o `kiro-cli`) rinnova la STESSA sessione in background sul proprio schedule. Il refresh proattivo di AIUsage.NET si è scontrato con quello dell'IDE — confermato dal log reale (`kiro ok` alle 08:17, poi `Session expired` ogni 5 minuti da 08:27 in avanti, sessione mai più recuperata) — e AWS ha reagito revocando l'intera famiglia di token, buttando fuori l'utente anche dall'IDE. Fix: **eliminato ogni refresh proattivo**; il refresh avviene solo in modo reattivo dopo un vero 401/403 dall'API di usage, e prima di chiamare l'endpoint di refresh il provider ri-legge il file/DB dal disco (`ResolveFreshAccessTokenAsync`) — se Kiro ha già rinnovato lui, usa quel token fresco senza toccare la rete. `KiroAuthStore.NeedsRefresh` rimosso (codice morto, nessun altro punto lo chiamava). Riprodotto due volte di seguito contro l'account reale dell'utente prima del fix.
 
+`[BUG FIX — 0.3.1, secondo giro]` **Il fix precedente non bastava: il refresh reattivo continuava a ritentare lo stesso refresh token già rifiutato da AWS, ciclo dopo ciclo.** Dopo il primo fix, un token di refresh già rigettato una volta veniva comunque ritentato ad ogni ciclo di refresh successivo (ogni 5 minuti) perché nulla ricordava che era già morto — confermato dal log: da `08:27` a `09:29` (quasi un'ora, ~7 tentativi) il provider ha continuato a chiamare l'endpoint di refresh AWS con lo stesso `refreshToken` scaduto. Lanciando manualmente l'exe per un test (avviando quindi un ottavo tentativo) l'IDE Kiro ha mostrato "Authentication failed. Please sign in again." nello stesso momento — bombardare ripetutamente l'endpoint OIDC con un token già invalidato sembra fare scattare una risposta di sicurezza lato AWS che termina la sessione attiva anche altrove. Fix: `KiroProvider` mantiene ora un dizionario in-memory (mai persistito, mai il token in chiaro — solo `SHA256` dell'ultimo `refreshToken` rifiutato per fonte di credenziali) e, prima di tentare un refresh reattivo, controlla se il token corrente ha lo stesso fingerprint di uno già rifiutato: se sì, fallisce subito con `SessionExpired` senza toccare la rete. Il fingerprint viene scartato automaticamente non appena il token su disco cambia (login effettuato altrove), quindi un nuovo login viene sempre ritentato normalmente. Verificato con due test di regressione (`KiroProviderTests.cs`): uno confronta il conteggio di chiamate all'endpoint di refresh tra due `RefreshAsync()` consecutivi con lo stesso token morto (1, non 2 — fallisce deliberatamente senza il fix, verificato con `git stash`), l'altro conferma che un token ruotato sul disco viene ritentato normalmente.
+
 `[BUG FIX — 0.3.0 → 0.3.1]` **`currentOverages` mostrato come se fosse già in dollari — non lo è.** Il mapper leggeva `currentOverages` e lo passava direttamente come importo USD in `MetricLine.Progress(..., ProgressFormat.Dollars)`. Confermato sbagliato contro un account reale: `currentOverages=740.1`, `overageRate=0.04`, spesa reale fatturata $29.60 — cioè `740.1 × 0.04`, non `$740.10`. `currentOverages` è un conteggio di unità (probabilmente richieste) nella stessa unità della riga base, non un importo già prezzato. Fix: la riga Overage moltiplica sempre `currentOverages * overageRate` prima di mostrare un valore in dollari; se manca il rate, mostra un badge "Enabled" invece di inventare un numero. Verificato contro i valori reali riportati dall'utente (740.1/0.04 → $29.60).
 | Pi | `[OMESSO]` | provider "aggregatore" cross-provider (attribuisce uso avvenuto dentro l'app "pi" ad altri provider); rimandato, bassa priorità |
 
@@ -550,6 +552,57 @@ per il filesystem: il secondo `Copy-Item` sovrascriveva silenziosamente il primo
 conteneva solo la CLI (o solo la tray app, a seconda dell'ordine), mai entrambi. Nessun errore
 visibile — bisognava aprire lo zip per notare che ne mancava uno. Corretto tenendo la CLI nella sua
 sottocartella `cli/` invece di appiattire tutto in una singola directory.
+
+## Auto-update (`Services/UpdateChecker.cs`) — **fatto** (0.3.1 → 0.4.0, sostituisce l'implementazione GitHub-poll-only)
+
+`[DIVERGENTE]` L'originale Swift usa Sparkle (appcast XML firmato + step di installazione in-app).
+Nessun equivalente .NET diretto degno di essere costruito da zero per un progetto open source a
+singolo maintainer; scelto invece [Velopack](https://velopack.io) (fork mantenuto di
+Squirrel.Windows), che legge le GitHub Releases di questo stesso repo tramite `Velopack.Sources.GithubSource`
+— nessun feed/server separato da hostare.
+
+**Cambio di modello di distribuzione, non solo una funzione aggiunta**: l'app passa da zip portabile
+("scarica, estrai, lancia l'exe dove vuoi") a installer vero (`Setup.exe`, installazione in
+`%LocalAppData%\AIUsage.NET\`, voce in "Programmi e funzionalità", shortcut Start Menu). Chi aveva
+già installato una versione zip precedente all'introduzione di Velopack deve fare un'ultima
+installazione manuale della prima versione Velopack; da lì in avanti gli aggiornamenti sono davvero
+automatici (download + apply + restart), non solo un link che apre il browser come nella prima
+implementazione dell'`UpdateChecker`. `PublishSingleFile` è stato disattivato per la tray app in
+`release.ps1` — Velopack ha bisogno dei singoli file/DLL per calcolare le patch delta, non di un
+eseguibile self-extracting; la CLI (`aiusage.exe`, non gestita da Velopack) continua a usare
+`PublishSingleFile` e viene zippata separatamente.
+
+- **`App.xaml.cs`**: `VelopackApp.Build().Run()` chiamato come prima riga di `OnStartup`, prima di
+  `AppLog.Bootstrap` — deve girare prima di qualsiasi altro codice perché al primo lancio dopo un
+  aggiornamento questo re-esegue gli hook post-install/apply di Velopack con argomenti CLI speciali,
+  poi termina il processo prima di raggiungere il resto di `OnStartup`.
+- **`Services/UpdateChecker.cs`**: riscritto per appoggiarsi a `Velopack.UpdateManager` invece del
+  poll diretto dell'API REST di GitHub. Introdotta `IAppUpdateManager` (interfaccia sottile, stesso
+  pattern di `IHttpClient`/`ISqliteAccessing` già nel progetto) perché la classe concreta
+  `UpdateManager` di Velopack non è pensata per essere mockata nei test unitari; `VelopackAppUpdateManager`
+  è l'implementazione reale, `FakeAppUpdateManager` (nei test) quella finta. `IsNewer` (confronto
+  manuale di stringhe di versione dotted) è stato rimosso — Velopack confronta le versioni
+  internamente via `SemanticVersion`.
+- **`UpdateChecker.DownloadAndApplyAsync`**: nuovo metodo che scarica l'update e chiama
+  `ApplyUpdatesAndRestart` — l'app termina e riparte nella nuova versione. Prima l'unica azione
+  possibile era aprire la pagina della release nel browser; l'utente doveva scaricare e sostituire
+  gli eseguibili a mano.
+- **`TrayController.cs`**: la voce di menu "Update available" ora scarica e installa direttamente
+  (con conferma dell'utente via click, mai in automatico in background) invece di apire solo il
+  link della release.
+- **`script/release.ps1`** e **`.github/workflows/release.yml`**: riscritti per usare `vpk pack`
+  (che produce `Setup.exe`, uno zip portabile, e il feed `releases.win.json` sotto `dist/Releases/`)
+  e `vpk upload github --publish --merge` per allegare tutto alla stessa GitHub Release del tag,
+  invece di zippare l'output di `dotnet publish` a mano. `vpk` è installato come global tool
+  (`dotnet tool install -g vpk`), non tramite `dnx` — `dnx` richiede il .NET 10 SDK, mentre questo
+  progetto builda su .NET 8.
+- Versione di Velopack pinnata a `1.2.0` (ultima stabile su NuGet al momento; sopra ci sono solo
+  build pre-release `1.2.11x-*`), sia nel package NuGet (`AIUsage.Core.csproj`,
+  `AIUsage.Tray.csproj`) sia nel `vpk` CLI installato in CI, per evitare il disallineamento fra tool
+  e libreria che la stessa documentazione Velopack segnala come causa comune di problemi.
+
+`[OMESSO]` Firma del codice (certificato Authenticode via `vpk pack --signParams`) non ancora
+collegata — stesso limite di prima, SmartScreen avviserà comunque al primo avvio dell'installer.
 
 ## Documentazione (`docs/`) — **fatto**
 

@@ -51,16 +51,23 @@ account's usage actually lives) can differ — on this maintainer's own account,
 derived from the resolved profile ARN, falling back to `us-east-1` only when no profile ARN is known
 yet — never the SSO region. The SSO region is used exclusively to reach the token-refresh endpoint.
 
-### AIUsage.NET never refreshes your token proactively
+### AIUsage.NET never refreshes your token proactively, and never retries a token AWS already rejected
 
 Kiro's refresh tokens (both the desktop and `kiro-cli` flavors) are AWS SSO/OIDC and single-use:
 redeeming one invalidates it and issues a new one. The Kiro IDE / `kiro-cli` already rotate their
 own refresh token in the background as it nears expiry — if AIUsage.NET also refreshed proactively
 on its own timer, the two could race, and AWS treats the loser as token reuse and revokes the whole
 token family, forcing you to log in again **in Kiro itself**, not just in AIUsage.NET. This was
-reproduced against a real account (see `PORTING_NOTES.md`) and is why AIUsage.NET only refreshes
-reactively, after a real 401/403 from the usage API — and even then it re-reads the credential file
-or database first, in case Kiro already rotated it, before ever calling the refresh endpoint itself.
+reproduced against a real account and is why AIUsage.NET only refreshes reactively, after a real
+401/403 from the usage API — and even then it re-reads the credential file or database first, in
+case Kiro already rotated it, before ever calling the refresh endpoint itself.
+
+A second, related failure mode: once AWS actually rejects a refresh token over the network,
+AIUsage.NET remembers that (in memory, for the running process only) and never retries the exact
+same dead token again. Retrying it every refresh cycle indefinitely was observed to eventually
+affect the live Kiro IDE session too, not just this app's cached copy — see `PORTING_NOTES.md` for
+the reproduction. Once you sign in again (in Kiro or `kiro-cli`), the refresh token on disk changes
+and is tried normally.
 
 ## Troubleshooting
 

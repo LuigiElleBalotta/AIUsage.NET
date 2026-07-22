@@ -1,44 +1,61 @@
 using AIUsage.Core.Services;
 using AIUsage.Core.Tests.TestHelpers;
+using Velopack;
 using Xunit;
 
 namespace AIUsage.Core.Tests.Services;
 
-public class UpdateCheckerTests
+/// <summary>Fake <see cref="IAppUpdateManager"/> for tests, avoiding any real Velopack install
+/// detection or network calls.</summary>
+public sealed class FakeAppUpdateManager : IAppUpdateManager
 {
-    [Theory]
-    [InlineData("0.2.0", "0.1.2", true)]
-    [InlineData("0.1.2", "0.1.2", false)]
-    [InlineData("0.1.1", "0.1.2", false)]
-    [InlineData("1.0.0", "0.9.9", true)]
-    [InlineData("0.2", "0.1.9", true)]
-    [InlineData("0.2.0", "0.2", false)]
-    [InlineData("0.2.0-beta.1", "0.1.2", true)]
-    public void IsNewer_ComparesDottedVersions(string candidate, string current, bool expected)
+    public bool IsInstalled { get; set; } = true;
+    public UpdateInfo? NextCheckResult { get; set; }
+    public Exception? CheckFault { get; set; }
+    public int CheckCallCount { get; private set; }
+    public int DownloadCallCount { get; private set; }
+    public VelopackAsset? AppliedAsset { get; private set; }
+
+    public Task<UpdateInfo?> CheckForUpdatesAsync()
     {
-        Assert.Equal(expected, UpdateChecker.IsNewer(candidate, current));
+        CheckCallCount++;
+        if (CheckFault is not null) throw CheckFault;
+        return Task.FromResult(NextCheckResult);
     }
 
-    [Fact]
-    public async Task CheckNowAsync_ReportsUpdate_WhenLatestTagIsNewer()
+    public Task DownloadUpdatesAsync(UpdateInfo updates, Action<int>? progress, CancellationToken cancellationToken)
     {
-        var http = new FakeHttpClient();
-        http.Enqueue(HttpResponseFixture.Json("""{"tag_name":"v0.2.0","html_url":"https://example.com/releases/v0.2.0"}"""));
-        var checker = new UpdateChecker(http, new InMemorySettingsStore());
+        DownloadCallCount++;
+        progress?.Invoke(100);
+        return Task.CompletedTask;
+    }
+
+    public void ApplyUpdatesAndRestart(VelopackAsset? toApply) => AppliedAsset = toApply;
+
+    public static UpdateInfo MakeInfo(string version) =>
+        new(new VelopackAsset { Version = SemanticVersion.Parse(version) }, isDowngrade: false);
+}
+
+public class UpdateCheckerTests
+{
+    [Fact]
+    public async Task CheckNowAsync_ReportsUpdate_WhenVelopackFindsOne()
+    {
+        var manager = new FakeAppUpdateManager { NextCheckResult = FakeAppUpdateManager.MakeInfo("0.2.0") };
+        var checker = new UpdateChecker(manager, new InMemorySettingsStore());
 
         var outcome = await checker.CheckNowAsync("0.1.2");
 
         Assert.True(outcome.IsUpdateAvailable);
         Assert.Equal("0.2.0", outcome.LatestVersion);
-        Assert.Equal("https://example.com/releases/v0.2.0", outcome.ReleaseUrl);
+        Assert.NotNull(outcome.UpdateInfo);
     }
 
     [Fact]
-    public async Task CheckNowAsync_ReportsNoUpdate_WhenCurrentIsLatest()
+    public async Task CheckNowAsync_ReportsNoUpdate_WhenVelopackFindsNone()
     {
-        var http = new FakeHttpClient();
-        http.Enqueue(HttpResponseFixture.Json("""{"tag_name":"v0.1.2","html_url":"https://example.com/releases/v0.1.2"}"""));
-        var checker = new UpdateChecker(http, new InMemorySettingsStore());
+        var manager = new FakeAppUpdateManager { NextCheckResult = null };
+        var checker = new UpdateChecker(manager, new InMemorySettingsStore());
 
         var outcome = await checker.CheckNowAsync("0.1.2");
 
@@ -47,10 +64,23 @@ public class UpdateCheckerTests
     }
 
     [Fact]
-    public async Task CheckNowAsync_ReturnsNoUpdate_WhenRequestFails()
+    public async Task CheckNowAsync_ReturnsNoUpdate_WhenNotInstalled()
     {
-        var http = new FakeHttpClient { Fault = new HttpClientError("boom") };
-        var checker = new UpdateChecker(http, new InMemorySettingsStore());
+        var manager = new FakeAppUpdateManager { IsInstalled = false, NextCheckResult = FakeAppUpdateManager.MakeInfo("0.2.0") };
+        var checker = new UpdateChecker(manager, new InMemorySettingsStore());
+
+        var outcome = await checker.CheckNowAsync("0.1.2");
+
+        Assert.False(outcome.IsUpdateAvailable);
+        Assert.Null(outcome.LatestVersion);
+        Assert.Equal(0, manager.CheckCallCount);
+    }
+
+    [Fact]
+    public async Task CheckNowAsync_ReturnsNoUpdate_WhenCheckThrows()
+    {
+        var manager = new FakeAppUpdateManager { CheckFault = new InvalidOperationException("network down") };
+        var checker = new UpdateChecker(manager, new InMemorySettingsStore());
 
         var outcome = await checker.CheckNowAsync("0.1.2");
 
@@ -59,70 +89,78 @@ public class UpdateCheckerTests
     }
 
     [Fact]
-    public async Task CheckNowAsync_ReturnsNoUpdate_OnNon200Status()
+    public async Task CheckIfDueAsync_SkipsCheck_WithinThrottleWindow()
     {
-        var http = new FakeHttpClient();
-        http.Enqueue(HttpResponseFixture.Empty(404));
-        var checker = new UpdateChecker(http, new InMemorySettingsStore());
-
-        var outcome = await checker.CheckNowAsync("0.1.2");
-
-        Assert.False(outcome.IsUpdateAvailable);
-        Assert.Null(outcome.LatestVersion);
-    }
-
-    [Fact]
-    public async Task CheckIfDueAsync_SkipsNetworkCall_WithinThrottleWindow()
-    {
-        var http = new FakeHttpClient();
-        http.Enqueue(HttpResponseFixture.Json("""{"tag_name":"v0.2.0","html_url":"https://example.com"}"""));
+        var manager = new FakeAppUpdateManager { NextCheckResult = FakeAppUpdateManager.MakeInfo("0.2.0") };
         var settings = new InMemorySettingsStore();
         var now = DateTimeOffset.Parse("2026-07-21T10:00:00Z");
-        var checker = new UpdateChecker(http, settings, () => now);
+        var checker = new UpdateChecker(manager, settings, () => now);
 
         var first = await checker.CheckIfDueAsync("0.1.2");
         Assert.NotNull(first);
-        Assert.Single(http.Requests);
+        Assert.Equal(1, manager.CheckCallCount);
 
         now = now.AddHours(1);
         var second = await checker.CheckIfDueAsync("0.1.2");
 
         Assert.Null(second);
-        Assert.Single(http.Requests);
+        Assert.Equal(1, manager.CheckCallCount);
     }
 
     [Fact]
     public async Task CheckIfDueAsync_ChecksAgain_AfterThrottleWindowElapses()
     {
-        var http = new FakeHttpClient();
-        http.Enqueue(HttpResponseFixture.Json("""{"tag_name":"v0.1.2","html_url":"https://example.com"}"""));
-        http.Enqueue(HttpResponseFixture.Json("""{"tag_name":"v0.2.0","html_url":"https://example.com"}"""));
+        var manager = new FakeAppUpdateManager { NextCheckResult = null };
         var settings = new InMemorySettingsStore();
         var now = DateTimeOffset.Parse("2026-07-21T10:00:00Z");
-        var checker = new UpdateChecker(http, settings, () => now);
+        var checker = new UpdateChecker(manager, settings, () => now);
 
         await checker.CheckIfDueAsync("0.1.2");
 
+        manager.NextCheckResult = FakeAppUpdateManager.MakeInfo("0.2.0");
         now = now.AddHours(25);
         var outcome = await checker.CheckIfDueAsync("0.1.2");
 
         Assert.NotNull(outcome);
         Assert.True(outcome!.IsUpdateAvailable);
-        Assert.Equal(2, http.Requests.Count);
+        Assert.Equal(2, manager.CheckCallCount);
     }
 
     [Fact]
     public async Task CheckIfDueAsync_SuppressesUpdate_ForSkippedVersion()
     {
-        var http = new FakeHttpClient();
-        http.Enqueue(HttpResponseFixture.Json("""{"tag_name":"v0.2.0","html_url":"https://example.com"}"""));
+        var manager = new FakeAppUpdateManager { NextCheckResult = FakeAppUpdateManager.MakeInfo("0.2.0") };
         var settings = new InMemorySettingsStore();
-        var checker = new UpdateChecker(http, settings);
+        var checker = new UpdateChecker(manager, settings);
         checker.SkipVersion("0.2.0");
 
         var outcome = await checker.CheckIfDueAsync("0.1.2");
 
         Assert.NotNull(outcome);
         Assert.False(outcome!.IsUpdateAvailable);
+    }
+
+    [Fact]
+    public async Task DownloadAndApplyAsync_DownloadsThenApplies()
+    {
+        var info = FakeAppUpdateManager.MakeInfo("0.2.0");
+        var manager = new FakeAppUpdateManager { NextCheckResult = info };
+        var checker = new UpdateChecker(manager, new InMemorySettingsStore());
+        var outcome = await checker.CheckNowAsync("0.1.2");
+
+        await checker.DownloadAndApplyAsync(outcome);
+
+        Assert.Equal(1, manager.DownloadCallCount);
+        Assert.NotNull(manager.AppliedAsset);
+    }
+
+    [Fact]
+    public async Task DownloadAndApplyAsync_Throws_WhenOutcomeHasNoUpdateInfo()
+    {
+        var manager = new FakeAppUpdateManager();
+        var checker = new UpdateChecker(manager, new InMemorySettingsStore());
+        var outcome = new UpdateChecker.Outcome(false, null, null);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => checker.DownloadAndApplyAsync(outcome));
     }
 }

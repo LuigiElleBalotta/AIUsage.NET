@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Windows;
 using System.Windows.Forms;
 using AIUsage.Core.App;
@@ -21,7 +20,7 @@ public sealed class TrayController : IDisposable
     private readonly UpdateChecker _updateChecker = new();
     private MetricsWindow? _window;
     private ToolStripMenuItem? _updateMenuItem;
-    private string? _updateReleaseUrl;
+    private UpdateChecker.Outcome? _pendingUpdate;
 
     public TrayController(AppContainer container)
     {
@@ -66,7 +65,7 @@ public sealed class TrayController : IDisposable
     private async Task CheckForUpdatesOnLaunchAsync()
     {
         var outcome = await _updateChecker.CheckIfDueAsync(AppVersion.Display()).ConfigureAwait(true);
-        if (outcome is { IsUpdateAvailable: true }) ShowUpdateAvailable(outcome.LatestVersion!, outcome.ReleaseUrl!);
+        if (outcome is { IsUpdateAvailable: true }) ShowUpdateAvailable(outcome);
     }
 
     private async Task CheckForUpdatesManuallyAsync()
@@ -74,7 +73,7 @@ public sealed class TrayController : IDisposable
         var outcome = await _updateChecker.CheckNowAsync(AppVersion.Display()).ConfigureAwait(true);
         if (outcome.IsUpdateAvailable)
         {
-            ShowUpdateAvailable(outcome.LatestVersion!, outcome.ReleaseUrl!);
+            ShowUpdateAvailable(outcome);
         }
         else if (outcome.LatestVersion is not null)
         {
@@ -86,21 +85,37 @@ public sealed class TrayController : IDisposable
         }
     }
 
-    private void ShowUpdateAvailable(string latestVersion, string releaseUrl)
+    private void ShowUpdateAvailable(UpdateChecker.Outcome outcome)
     {
-        _updateReleaseUrl = releaseUrl;
+        _pendingUpdate = outcome;
         if (_updateMenuItem is null)
         {
             _updateMenuItem = new ToolStripMenuItem { Font = new System.Drawing.Font(_notifyIcon.ContextMenuStrip!.Font, System.Drawing.FontStyle.Bold) };
-            _updateMenuItem.Click += (_, _) =>
-            {
-                if (_updateReleaseUrl is not null) Process.Start(new ProcessStartInfo(_updateReleaseUrl) { UseShellExecute = true });
-            };
+            _updateMenuItem.Click += async (_, _) => await InstallPendingUpdateAsync().ConfigureAwait(true);
             _notifyIcon.ContextMenuStrip!.Items.Insert(0, _updateMenuItem);
             _notifyIcon.ContextMenuStrip!.Items.Insert(1, new ToolStripSeparator());
         }
-        _updateMenuItem.Text = $"Update available: v{latestVersion}";
-        _notifyIcon.ShowBalloonTip(6000, "AIUsage update available", $"Version {latestVersion} is available. Click the tray icon menu to download.", ToolTipIcon.Info);
+        _updateMenuItem.Text = $"Install update: v{outcome.LatestVersion}";
+        _notifyIcon.ShowBalloonTip(6000, "AIUsage update available",
+            $"Version {outcome.LatestVersion} is available. Click the tray icon menu to install and restart.", ToolTipIcon.Info);
+    }
+
+    /// <summary>Downloads and applies the pending update, then restarts the app. This is the only
+    /// path that actually installs anything — nothing runs silently in the background; the user must
+    /// click the tray menu item first.</summary>
+    private async Task InstallPendingUpdateAsync()
+    {
+        if (_pendingUpdate is not { } outcome || outcome.UpdateInfo is null) return;
+        try
+        {
+            _notifyIcon.ShowBalloonTip(4000, "AIUsage", $"Downloading v{outcome.LatestVersion}...", ToolTipIcon.Info);
+            await _updateChecker.DownloadAndApplyAsync(outcome).ConfigureAwait(true);
+            // ApplyUpdatesAndRestart exits this process; execution normally does not continue past here.
+        }
+        catch (Exception ex)
+        {
+            _notifyIcon.ShowBalloonTip(6000, "AIUsage", $"Update failed: {ex.Message}", ToolTipIcon.Error);
+        }
     }
 
     private void OnSnapshotsChanged()
