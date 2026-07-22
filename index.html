@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AIUsage.NET — AI usage tracking for your Windows tray</title>
+<meta name="description" content="Track Claude, Codex, Cursor, Copilot, Grok, and more AI coding subscriptions from your Windows system tray. Free, open source, .NET 8.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap header-inner">
+    <a class="brand" href="#">
+      <img src="favicon.svg" alt="" width="22" height="22">
+      <span>AIUsage<span class="brand-dim">.NET</span></span>
+    </a>
+    <nav class="site-nav">
+      <a href="#providers">Providers</a>
+      <a href="#api">Local API</a>
+      <a href="https://github.com/LuigiElleBalotta/AIUsage.NET/blob/main/docs/README.md">Docs</a>
+      <a class="nav-cta" href="https://github.com/LuigiElleBalotta/AIUsage.NET">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+
+  <section class="hero">
+    <div class="wrap hero-inner">
+      <p class="eyebrow">Windows tray app · Free · Open source</p>
+      <h1>Know exactly how much of your AI coding plans you have left.</h1>
+      <p class="hero-sub">
+        AIUsage.NET sits quietly in your system tray and shows session limits, weekly quotas,
+        credits, and spend for the AI coding tools you already pay for — all in one popup, updated
+        every five minutes.
+      </p>
+      <div class="cta-row">
+        <a class="btn btn-primary" href="https://github.com/LuigiElleBalotta/AIUsage.NET/releases/latest">Download for Windows</a>
+        <a class="btn btn-ghost" href="https://github.com/LuigiElleBalotta/AIUsage.NET">View on GitHub</a>
+      </div>
+      <p class="hero-note">Windows 10+ · Installer + auto-updates via Velopack · MIT License</p>
+    </div>
+  </section>
+
+  <section class="mock-section">
+    <div class="wrap">
+      <div class="mock-window" aria-hidden="true">
+        <div class="mock-titlebar">
+          <span class="mock-dot"></span>
+          <span class="mock-dot"></span>
+          <span class="mock-dot"></span>
+          <span class="mock-title">AIUsage</span>
+        </div>
+        <div class="mock-body">
+
+          <div class="mock-card">
+            <div class="mock-card-head">
+              <img class="mock-provider-icon" src="icons/claude.svg" alt="Claude">
+              <span class="mock-card-title">Claude</span>
+              <span class="mock-pill">Pro</span>
+            </div>
+            <div class="mock-row">
+              <span class="mock-row-label">Session</span>
+              <span class="mock-row-value">73% left</span>
+            </div>
+            <div class="mock-bar"><div class="mock-bar-fill" style="width:73%"></div></div>
+            <div class="mock-row">
+              <span class="mock-row-label">Weekly</span>
+              <span class="mock-row-value">41% left</span>
+            </div>
+            <div class="mock-bar"><div class="mock-bar-fill warn" style="width:41%"></div></div>
+          </div>
+
+          <div class="mock-card">
+            <div class="mock-card-head">
+              <img class="mock-provider-icon" src="icons/codex.svg" alt="Codex">
+              <span class="mock-card-title">Codex</span>
+              <span class="mock-pill">Plus</span>
+            </div>
+            <div class="mock-row">
+              <span class="mock-row-label">Session</span>
+              <span class="mock-row-value">96% left</span>
+            </div>
+            <div class="mock-bar"><div class="mock-bar-fill" style="width:96%"></div></div>
+            <div class="mock-row">
+              <span class="mock-row-label">Last 30 Days</span>
+              <span class="mock-row-value mock-row-muted">$14.20 · 18.9M tokens</span>
+            </div>
+          </div>
+
+          <div class="mock-card">
+            <div class="mock-card-head">
+              <img class="mock-provider-icon" src="icons/cursor.svg" alt="Cursor">
+              <span class="mock-card-title">Cursor</span>
+              <span class="mock-pill">Ultra</span>
+            </div>
+            <div class="mock-row">
+              <span class="mock-row-label">Total Usage</span>
+              <span class="mock-row-value">62% left</span>
+            </div>
+            <div class="mock-bar"><div class="mock-bar-fill warn" style="width:62%"></div></div>
+            <div class="mock-row">
+              <span class="mock-row-label">Extra Usage</span>
+              <span class="mock-row-value mock-row-muted">$41.30 spent</span>
+            </div>
+          </div>
+
+        </div>
+        <div class="mock-footer">
+          <span>AIUsage.NET 0.4.1</span>
+          <span>Next refresh in 3m</span>
+        </div>
+      </div>
+      <p class="mock-caption">A representative mock, not a live screenshot — numbers shown are illustrative.</p>
+    </div>
+  </section>
+
+  <section id="providers" class="providers-section">
+    <div class="wrap">
+      <h2>Built for the AI coding stack you actually use</h2>
+      <p class="section-sub">One provider is a small, self-contained module. Adding a new one is a documented, four-step process — see <a href="https://github.com/LuigiElleBalotta/AIUsage.NET/blob/main/docs/adding-a-provider.md">Adding a Provider</a>.</p>
+      <div class="provider-grid">
+        <div class="provider-tile"><img class="provider-icon" src="icons/claude.svg" alt=""><span>Claude</span></div>
+        <div class="provider-tile"><img class="provider-icon" src="icons/codex.svg" alt=""><span>Codex</span></div>
+        <div class="provider-tile"><img class="provider-icon" src="icons/cursor.svg" alt=""><span>Cursor</span></div>
+        <div class="provider-tile"><img class="provider-icon" src="icons/copilot.svg" alt=""><span>Copilot</span></div>
+        <div class="provider-tile"><img class="provider-icon" src="icons/antigravity.svg" alt=""><span>Antigravity</span></div>
+        <div class="provider-tile"><img class="provider-icon" src="icons/devin.svg" alt=""><span>Devin</span></div>
+        <div class="provider-tile"><img class="provider-icon" src="icons/grok.svg" alt=""><span>Grok</span></div>
+        <div class="provider-tile"><img class="provider-icon" src="icons/opencode.svg" alt=""><span>OpenCode</span></div>
+        <div class="provider-tile"><img class="provider-icon" src="icons/openrouter.svg" alt=""><span>OpenRouter</span></div>
+        <div class="provider-tile"><img class="provider-icon" src="icons/zai.svg" alt=""><span>Z.ai</span></div>
+      </div>
+      <p class="section-note">Everything is plugin-driven — more providers land as pull requests come in.</p>
+    </div>
+  </section>
+
+  <section class="features-section">
+    <div class="wrap">
+      <div class="feature-grid">
+        <div class="feature">
+          <h3>Every tool, one glance</h3>
+          <p>All your AI coding subscriptions in a single popup. No more tab-hopping between dashboards to check if you're about to hit a limit.</p>
+        </div>
+        <div class="feature">
+          <h3>Lives in your tray</h3>
+          <p>Click the tray icon, see where you stand, close it. Cached values show instantly; a background refresh keeps them current every five minutes.</p>
+        </div>
+        <div class="feature">
+          <h3>Know before you run out</h3>
+          <p>Session and weekly windows, credit balances, and local spend estimates — colored by severity so a tight limit stands out before it's too late.</p>
+        </div>
+        <div class="feature">
+          <h3>Reads what's already there</h3>
+          <p>No pasting tokens. AIUsage.NET reads the credentials your CLI or editor already stored — Windows Credential Manager, local auth files, app state databases.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="api" class="api-section">
+    <div class="wrap">
+      <div class="api-grid">
+        <div class="api-copy">
+          <h2>One local API. Every screen you own.</h2>
+          <p>
+            AIUsage.NET does the measuring. Your terminal prompt, your editor status line, your own
+            scripts — they all read the same numbers through a local, loopback-only HTTP API.
+            No tokens, no auth, no setup.
+          </p>
+          <div class="curl-line"><span class="curl-dollar">$</span> curl localhost:6736/v1/limits</div>
+          <p class="api-note">
+            See <a href="https://github.com/LuigiElleBalotta/AIUsage.NET/blob/main/docs/local-http-api.md">the full API reference</a>
+            for every route, resource key, and response shape.
+          </p>
+        </div>
+        <pre class="api-code"><code>{
+  "schema": "openusage.limits.v1",
+  "generatedAt": "2026-07-21T13:11:52Z",
+  "providers": {
+    "claude": {
+      "displayName": "Claude",
+      "plan": "Pro",
+      "fetchedAt": "2026-07-21T13:11:46Z",
+      "stale": false,
+      "resources": {
+        "session": {
+          "kind": "consumption",
+          "unit": "percent",
+          "used": 27,
+          "limit": 100,
+          "remaining": 73,
+          "utilization": 0.27,
+          "resetsAt": "2026-07-21T17:39:59Z",
+          "windowSeconds": 18000
+        }
+      }
+    }
+  },
+  "errors": []
+}</code></pre>
+      </div>
+    </div>
+  </section>
+
+  <section class="oss-section">
+    <div class="wrap oss-inner">
+      <h2>Free, open source, and yours to change</h2>
+      <p>
+        AIUsage.NET is a .NET 8 / WPF port of the architecture behind
+        <a href="https://github.com/robinebers/openusage">OpenUsage</a> (macOS), adapted from the
+        ground up for Windows — its own auth stores, its own tray UI, its own release pipeline.
+        MIT-licensed. Read <a href="https://github.com/LuigiElleBalotta/AIUsage.NET/blob/main/PORTING_NOTES.md">PORTING_NOTES.md</a>
+        for exactly what was ported, adapted, or intentionally left out.
+      </p>
+      <a class="btn btn-ghost" href="https://github.com/LuigiElleBalotta/AIUsage.NET">Star on GitHub</a>
+    </div>
+  </section>
+
+  <section class="final-cta">
+    <div class="wrap final-cta-inner">
+      <h2>Stop guessing where your limits are.</h2>
+      <a class="btn btn-primary btn-lg" href="https://github.com/LuigiElleBalotta/AIUsage.NET/releases/latest">Download AIUsage.NET</a>
+      <p class="hero-note">Windows 10+ · Free · Open Source · MIT License</p>
+    </div>
+  </section>
+
+</main>
+
+<footer class="site-footer">
+  <div class="wrap footer-inner">
+    <span>AIUsage.NET</span>
+    <nav>
+      <a href="https://github.com/LuigiElleBalotta/AIUsage.NET">GitHub</a>
+      <a href="https://github.com/LuigiElleBalotta/AIUsage.NET/releases">Releases</a>
+      <a href="https://github.com/LuigiElleBalotta/AIUsage.NET/issues">Issues</a>
+      <a href="https://github.com/LuigiElleBalotta/AIUsage.NET/blob/main/docs/README.md">Docs</a>
+    </nav>
+  </div>
+</footer>
+
+</body>
+</html>
