@@ -1,0 +1,38 @@
+name: Deploy landing page
+
+# Publishes the static site in site/ to GitHub Pages. Runs on every push to main that touches
+# site/, and can also be triggered manually. This replaces the old manual gh-pages orphan-branch
+# workflow — the site's source of truth now lives on main under site/, and this workflow is the
+# only thing that writes to the gh-pages branch (via actions/deploy-pages).
+on:
+  push:
+    branches: ["main"]
+    paths: ["site/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

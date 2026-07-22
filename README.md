@@ -1,7 +1,8 @@
 # AIUsage.NET
 
 Track your AI coding subscriptions from the Windows system tray — a .NET port of
-[OpenUsage](https://github.com/robinebers/openusage).
+[OpenUsage](https://github.com/robinebers/openusage). See the
+[landing page](https://luigiellebalotta.github.io/AIUsage.NET/) for a quick overview.
 
 AIUsage.NET shows how much of your AI coding plans you've used: session and weekly limits, credits,
 and spend, all in one popup window. It follows the same architecture and behavior as the original
@@ -9,7 +10,7 @@ macOS/Swift edition, adapted for Windows — see [PORTING_NOTES.md](PORTING_NOTE
 was ported faithfully, simplified, or is not yet implemented.
 
 <p align="center">
-  <img src="screenshots/UI.png" alt="AIUsage.NET tray dashboard showing Claude and Codex usage" width="420">
+  <img src="screenshots/UI_0.4.1.png" alt="AIUsage.NET tray dashboard showing Claude and Codex usage, version 0.4.1" width="380">
 </p>
 
 ## Status
