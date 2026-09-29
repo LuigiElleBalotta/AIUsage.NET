@@ -15,7 +15,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\AIUsage.Core\AIUsage.Core.csproj" />
-    <PackageReference Include="Velopack" Version="1.2.0" />
+    <PackageReference Include="Velopack" Version="1.2.161" />
   </ItemGroup>
 
   <!-- Custom entry point (Program.cs) instead of WPF's default App.xaml-generated Main(), per
