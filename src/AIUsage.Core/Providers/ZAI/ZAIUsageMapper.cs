@@ -9,6 +9,11 @@ public static class ZAIUsageMapper
 {
     public const long MonthlyPeriodMs = 30L * 24 * 60 * 60 * 1000;
 
+    /// <summary>Token-window limit types. Newer V3 coding plans report CREDIT_LIMIT instead of
+    /// TOKENS_LIMIT; the (unit, number) window encoding and the percentage field are identical
+    /// for both (upstream robinebers/openusage#1104).</summary>
+    private static readonly string[] TokenLimitTypes = ["TOKENS_LIMIT", "CREDIT_LIMIT"];
+
     public static (string? Plan, List<MetricLine> Lines) Map(byte[] quotaBody, byte[]? subscriptionBody)
     {
         var plan = subscriptionBody is not null ? PlanName(subscriptionBody) : null;
@@ -48,7 +53,9 @@ public static class ZAIUsageMapper
         var lines = new List<MetricLine>();
         var sawRecognizedLimit = false;
 
-        var tokenLimits = limits.Where(l => GetString(l, "type") == "TOKENS_LIMIT" || GetString(l, "name") == "TOKENS_LIMIT").ToList();
+        var tokenLimits = limits
+            .Where(l => TokenLimitTypes.Any(t => GetString(l, "type") == t || GetString(l, "name") == t))
+            .ToList();
         foreach (var entry in tokenLimits)
         {
             var window = ClassifyTokenWindow(entry);
