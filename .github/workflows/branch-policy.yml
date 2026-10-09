@@ -1,0 +1,37 @@
+name: Branch Policy
+
+# Enforces git flow on pull requests (see "Branching & Releases" in AGENTS.md):
+#   -> main     only from release/* or hotfix/* branches of this repo
+#   -> develop  from feature/*, bugfix/*, release/*, hotfix/*, support/*, dependabot/* or main
+#                (back-merge) of this repo; PRs from forks may come from any branch.
+# Required as a status check by the branch ruleset on main and develop.
+on:
+  pull_request:
+    branches: [main, develop]
+
+permissions:
+  contents: read
+
+jobs:
+  branch-policy:
+    name: Branch Policy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check source branch
+        env:
+          BASE: ${{ github.base_ref }}
+          HEAD: ${{ github.head_ref }}
+          IS_FORK: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
+        run: |
+          if [ "$BASE" = "main" ]; then
+            if [ "$IS_FORK" = "true" ] || ! [[ "$HEAD" =~ ^(release|hotfix)/[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "::error::PRs into main must come from release/X.Y.Z or hotfix/X.Y.Z (got '$HEAD'). Feature work goes to develop."
+              exit 1
+            fi
+          else
+            if [ "$IS_FORK" = "false" ] && ! [[ "$HEAD" =~ ^((feature|bugfix|release|hotfix|support|dependabot)/.+|main)$ ]]; then
+              echo "::error::PRs into develop must come from feature/*, bugfix/*, release/*, hotfix/*, support/* or dependabot/* (got '$HEAD')."
+              exit 1
+            fi
+          fi
+          echo "Branch '$HEAD' -> '$BASE' OK"

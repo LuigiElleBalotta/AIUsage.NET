@@ -60,6 +60,16 @@ jobs:
           "version=$version" >> $env:GITHUB_OUTPUT
           "prerelease=$prerelease" >> $env:GITHUB_OUTPUT
 
+      - name: Require WINGET_TOKEN for stable releases
+        if: steps.meta.outputs.prerelease == 'false'
+        shell: pwsh
+        env:
+          WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
+        run: |
+          if ([string]::IsNullOrEmpty($env:WINGET_TOKEN)) {
+            throw "Secret WINGET_TOKEN is not set: the winget step would fail after the release is published. Set it (classic PAT, scopes public_repo + workflow) and retry."
+          }
+
       - name: Build and pack
         shell: pwsh
         run: ./script/release.ps1 -Version "${{ steps.meta.outputs.version }}" -Runtime win-x64
