@@ -44,7 +44,7 @@ app state) — no extra login. OpenRouter and Z.ai are the exceptions: you suppl
 
 ## Installation
 
-**Winget** (pending review — see [microsoft/winget-pkgs#405974](https://github.com/microsoft/winget-pkgs/pull/405974)):
+**Winget:**
 
 ```powershell
 winget install LuigiElleBalotta.AIUsageNET

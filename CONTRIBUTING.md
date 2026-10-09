@@ -28,11 +28,11 @@ By submitting a pull request, you agree that your contribution is licensed under
 
 1. Open an issue describing the change (skip this for small, obvious fixes)
 2. Fork the repo
-3. Create a branch (`feat/my-change`, `fix/some-bug`, etc.)
+3. Create a branch from `develop` (`feature/my-change`; see "Branching & Releases" in [AGENTS.md](AGENTS.md))
 4. Make the change
 5. Run `dotnet build AIUsage.sln` (and `script/build_and_run.ps1` to smoke-test) to verify nothing is
    broken
-6. Open a PR against `main` using the PR template
+6. Open a PR against `develop` using the PR template
 
 ### Add a provider
 

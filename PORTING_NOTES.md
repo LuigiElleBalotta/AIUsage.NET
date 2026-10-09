@@ -598,6 +598,11 @@ eseguibile self-extracting; la CLI (`aiusage.exe`, non gestita da Velopack) cont
   invece di zippare l'output di `dotnet publish` a mano. `vpk` è installato come global tool
   (`dotnet tool install -g vpk`), non tramite `dnx` — `dnx` richiede il .NET 10 SDK, mentre questo
   progetto builda su .NET 8.
+- `[DIVERGENTE]` **Git flow + winget automatico**: `develop` è il branch di default, `main` contiene
+  solo codice rilasciato (vedi "Branching & Releases" in `AGENTS.md`). Tag `vX.Y.Z-N` = pre-release
+  GitHub (nessun winget), `vX.Y.Z` = release vera, valida solo se il commit è già su `main`, e apre in
+  automatico la PR su `microsoft/winget-pkgs` (job `winget` di `release.yml`, secret `WINGET_TOKEN`).
+  Nessun equivalente nella edizione Swift originale.
 - Versione di Velopack pinnata a `1.2.0` (ultima stabile su NuGet al momento; sopra ci sono solo
   build pre-release `1.2.11x-*`), sia nel package NuGet (`AIUsage.Core.csproj`,
   `AIUsage.Tray.csproj`) sia nel `vpk` CLI installato in CI, per evitare il disallineamento fra tool

@@ -1,12 +1,12 @@
 name: Deploy landing page
 
-# Publishes the static site in site/ to GitHub Pages. Runs on every push to main that touches
+# Publishes the static site in site/ to GitHub Pages. Runs on every push to develop that touches
 # site/, and can also be triggered manually. This replaces the old manual gh-pages orphan-branch
-# workflow — the site's source of truth now lives on main under site/, and this workflow is the
+# workflow — the site's source of truth now lives on develop under site/, and this workflow is the
 # only thing that writes to the gh-pages branch (via actions/deploy-pages).
 on:
   push:
-    branches: ["main"]
+    branches: ["develop"]
     paths: ["site/**"]
   workflow_dispatch:
 
