@@ -55,9 +55,27 @@ Conventions for the per-provider modules under `src/AIUsage.Core/Providers/<Name
   rebuild and restart to take effect. Use `script/build_and_run.ps1` (or `-Mode cli` for the CLI).
 - Run `dotnet build AIUsage.sln` and fix all warnings/errors before considering a change done.
 
+## Branching & Releases
+
+Git flow. `develop` is the default branch; `main` only ever holds released code.
+
+- `feature/<name>` — branch from `develop`, PR back into `develop`.
+- `release/X.Y.Z` — branch from `develop` when preparing a release. Only version bump
+  (`Directory.Build.props`) and release fixes go here. Merge into `main` (tag it) and back into
+  `develop`.
+- `hotfix/X.Y.Z` — branch from `main` for urgent fixes. Merge into `main` (tag it) and back into
+  `develop`.
+- Tags drive `.github/workflows/release.yml`: `vX.Y.Z-N` (N incrementing: `v0.5.0-1`, `v0.5.0-2`) is a
+  GitHub pre-release (Velopack feed flagged pre-release, no winget); `vX.Y.Z` is a real release
+  ("Latest") and also opens the winget-pkgs PR automatically (secret `WINGET_TOKEN`). A stable tag
+  must be on a commit already in `main`; the workflow rejects it otherwise.
+- Release steps: `git checkout -b release/X.Y.Z develop`, bump `<Version>`, optionally tag
+  `vX.Y.Z-1` to test a pre-release, then PR `release/X.Y.Z` → `main`, tag `vX.Y.Z` on the merge
+  commit, and PR/merge `main` → `develop`.
+
 ## Pull Requests
 
-Every PR description should follow the structure in `.github/PULL_REQUEST_TEMPLATE.md`: TL;DR, what
+Feature PRs target `develop`; release/hotfix PRs target `main`. Every PR description should follow the structure in `.github/PULL_REQUEST_TEMPLATE.md`: TL;DR, what
 was happening, what this changes, heads-up (optional), tests (optional), screenshots (required for
 any visual/Tray UI change).
 

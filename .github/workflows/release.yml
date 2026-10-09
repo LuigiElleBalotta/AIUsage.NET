@@ -1,8 +1,10 @@
 name: Release
 
-# Tag a version to ship it: `git tag v0.1.0 && git push origin v0.1.0`.
-# A tag with a pre-release suffix (e.g. v0.1.0-beta.1) publishes as a GitHub pre-release; a plain tag
-# (v0.1.0) publishes as "Latest". Auto-update is Velopack (see PORTING_NOTES.md), reading this repo's
+# Tag a version to ship it (see "Branching & Releases" in AGENTS.md):
+#   vX.Y.Z-N  (N = incrementing number, e.g. v0.5.0-1) -> GitHub pre-release, no winget.
+#   vX.Y.Z    (e.g. v0.5.0)                            -> real release ("Latest") + winget PR.
+# A stable tag must sit on a commit that is already on main (git flow: release/hotfix branches are
+# merged into main first, then tagged). Pre-release tags can be cut from any branch. Auto-update is Velopack (see PORTING_NOTES.md), reading this repo's
 # GitHub Releases directly — every asset `vpk pack`/`vpk upload` produces (Setup.exe, portable zip,
 # releases.win.json, delta packages) must land on the release for installed apps to find the update,
 # which is what `vpk upload github --publish` below does. This workflow does not notarize or sign
@@ -23,10 +25,15 @@ permissions:
 jobs:
   release:
     runs-on: windows-latest
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      tag: ${{ steps.meta.outputs.tag }}
+      prerelease: ${{ steps.meta.outputs.prerelease }}
     steps:
       - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.tag }}
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Setup .NET
@@ -40,8 +47,15 @@ jobs:
         run: |
           $tag = "${{ inputs.tag }}"
           if ([string]::IsNullOrEmpty($tag)) { $tag = "${{ github.ref_name }}" }
+          if ($tag -notmatch '^v\d+\.\d+\.\d+(-\d+)?$') {
+            throw "Tag '$tag' must look like vX.Y.Z (release) or vX.Y.Z-N (pre-release, N numeric)."
+          }
           $version = $tag -replace '^v', ''
-          $prerelease = $tag -match '-'
+          $prerelease = ($tag -match '-').ToString().ToLower()
+          if ($prerelease -eq 'false') {
+            git merge-base --is-ancestor HEAD origin/main
+            if ($LASTEXITCODE -ne 0) { throw "Stable tag '$tag' must point to a commit on main." }
+          }
           "tag=$tag" >> $env:GITHUB_OUTPUT
           "version=$version" >> $env:GITHUB_OUTPUT
           "prerelease=$prerelease" >> $env:GITHUB_OUTPUT
@@ -75,5 +89,23 @@ jobs:
             --outputDir dist/Releases `
             --publish `
             --merge `
+            $(if ('${{ steps.meta.outputs.prerelease }}' -eq 'true') { '--pre' }) `
             --releaseName "AIUsage.NET ${{ steps.meta.outputs.version }}" `
             --tag ${{ steps.meta.outputs.tag }}
+
+  # Real releases only: opens the winget-pkgs PR for the new version (pre-releases are never
+  # submitted). Needs a classic PAT with `public_repo` scope in the WINGET_TOKEN secret (GITHUB_TOKEN
+  # cannot open PRs on microsoft/winget-pkgs) and a fork of microsoft/winget-pkgs on the token's
+  # account. Runs in its own job so a winget problem never marks the GitHub release as failed.
+  winget:
+    needs: release
+    if: needs.release.outputs.prerelease == 'false'
+    runs-on: windows-latest
+    steps:
+      - uses: vedantmgoyal9/winget-releaser@v2
+        with:
+          identifier: LuigiElleBalotta.AIUsageNET
+          version: ${{ needs.release.outputs.version }}
+          release-tag: ${{ needs.release.outputs.tag }}
+          installers-regex: '-win-Setup\.exe$'
+          token: ${{ secrets.WINGET_TOKEN }}
