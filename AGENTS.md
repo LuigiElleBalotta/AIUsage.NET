@@ -75,11 +75,13 @@ Git flow. `develop` is the default branch; `main` only ever holds released code.
   `git flow release finish -m "X.Y.Z" X.Y.Z` (merges into `main`, tags `vX.Y.Z`, back-merges into
   `develop`, deletes the branch) and push `main`, `develop` and the tags. Hotfixes are the same with
   `git flow hotfix`.
-- Enforced on GitHub (rulesets, admins bypass so `git flow ... finish` can push): branch names must be
-  `main`, `develop`, `feature|bugfix|support|dependabot/*`, `release|hotfix/X.Y.Z`; tags must be
-  `vX.Y.Z` or `vX.Y.Z-N`; `main` and `develop` need a PR with passing `Build and Test` and `Branch
-  Policy` checks (`.github/workflows/branch-policy.yml`: `main` only from release/hotfix branches).
-  Stable tags also need the `WINGET_TOKEN` secret (classic PAT: `public_repo` + `workflow`).
+- Enforced on GitHub (rulesets; repo admins bypass so `git flow ... finish` can push): `main` and
+  `develop` can't be deleted or force-pushed and need a PR with passing `Build and Test` and `Branch
+  Policy` checks (`.github/workflows/branch-policy.yml`: `main` only from `release|hotfix/X.Y.Z`,
+  `develop` only from git flow branches, so a wrongly named branch can't be merged); pushed tags can't
+  be moved or deleted, and `release.yml` rejects tags that aren't `vX.Y.Z` / `vX.Y.Z-N`. GitHub can't
+  restrict branch/tag names on creation on this plan. Stable tags also need the `WINGET_TOKEN` secret
+  (classic PAT: `public_repo` + `workflow`).
 
 ## Pull Requests
 
