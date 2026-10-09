@@ -602,6 +602,8 @@ eseguibile self-extracting; la CLI (`aiusage.exe`, non gestita da Velopack) cont
   solo codice rilasciato (vedi "Branching & Releases" in `AGENTS.md`). Tag `vX.Y.Z-N` = pre-release
   GitHub (nessun winget), `vX.Y.Z` = release vera, valida solo se il commit è già su `main`, e apre in
   automatico la PR su `microsoft/winget-pkgs` (job `winget` di `release.yml`, secret `WINGET_TOKEN`).
+  Imposto via rulesets GitHub (nomi branch/tag, PR obbligatoria su `main`/`develop`, check
+  `Branch Policy`) e `script/setup-gitflow.ps1` per configurare git flow AVH in locale.
   Nessun equivalente nella edizione Swift originale.
 - Versione di Velopack pinnata a `1.2.0` (ultima stabile su NuGet al momento; sopra ci sono solo
   build pre-release `1.2.11x-*`), sia nel package NuGet (`AIUsage.Core.csproj`,

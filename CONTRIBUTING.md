@@ -28,7 +28,7 @@ By submitting a pull request, you agree that your contribution is licensed under
 
 1. Open an issue describing the change (skip this for small, obvious fixes)
 2. Fork the repo
-3. Create a branch from `develop` (`feature/my-change`; see "Branching & Releases" in [AGENTS.md](AGENTS.md))
+3. Run `script/setup-gitflow.ps1` once, then `git flow feature start my-change` to branch from `develop` (see "Branching & Releases" in [AGENTS.md](AGENTS.md))
 4. Make the change
 5. Run `dotnet build AIUsage.sln` (and `script/build_and_run.ps1` to smoke-test) to verify nothing is
    broken
