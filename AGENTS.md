@@ -75,6 +75,10 @@ Git flow. `develop` is the default branch; `main` only ever holds released code.
   `git flow release finish -m "X.Y.Z" X.Y.Z` (merges into `main`, tags `vX.Y.Z`, back-merges into
   `develop`, deletes the branch) and push `main`, `develop` and the tags. Hotfixes are the same with
   `git flow hotfix`.
+- `script/setup-gitflow.ps1` also enables `.githooks` (`core.hooksPath`): `reference-transaction`
+  refuses to create local branches whose name isn't a git flow one, `pre-push` refuses bad branch/tag
+  names. Client-side only (`--no-verify` or `GITFLOW_SKIP=1` bypass it); GitHub-side checks below
+  are the real gate.
 - Enforced on GitHub (rulesets; repo admins bypass so `git flow ... finish` can push): `main` and
   `develop` can't be deleted or force-pushed and need a PR with passing `Build and Test` and `Branch
   Policy` checks (`.github/workflows/branch-policy.yml`: `main` only from `release|hotfix/X.Y.Z`,
