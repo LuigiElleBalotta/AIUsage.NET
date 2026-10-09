@@ -45,8 +45,9 @@ Two undocumented internal endpoints Z.ai's own subscription UI uses (stable in p
   blank the meters).
 - `GET https://api.z.ai/api/monitor/usage/quota/limit` — the quota meters.
 
-The quota response carries a `limits` array. Each `TOKENS_LIMIT` entry is a token window; its
-window length decides which meter it feeds (sub-daily → Session, multi-day → Weekly), while a
+The quota response carries a `limits` array. Each token-window entry is one meter: older plans
+report it as `TOKENS_LIMIT`, newer V3 coding plans as `CREDIT_LIMIT` — both feed the same meters,
+and the entry's window length decides which one (sub-daily → Session, multi-day → Weekly). A
 `TIME_LIMIT` entry is the monthly web-search count. Reset times come back as epoch milliseconds.
 Missing required usage values are reported as an invalid response instead of being shown as zero.
 

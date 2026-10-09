@@ -44,6 +44,42 @@ public class ZAIUsageMapperTests
     }
 
     [Fact]
+    public void MapQuota_CreditLimitUnit3_ClassifiesAsSession()
+    {
+        // New V3 coding plans report CREDIT_LIMIT entries instead of TOKENS_LIMIT, with the
+        // same (unit, number) window encoding and percentage field (upstream openusage#1104).
+        var json = """
+        {
+          "limits": [
+            { "type": "CREDIT_LIMIT", "unit": 3, "number": 5, "percentage": 100, "nextResetTime": 1786624439633 }
+          ]
+        }
+        """;
+
+        var lines = ZAIUsageMapper.MapQuota(Body(json));
+
+        var session = Assert.IsType<MetricLine.Progress>(lines.Single(l => l.Label == "Session"));
+        Assert.Equal(100, session.Used);
+    }
+
+    [Fact]
+    public void MapQuota_CreditLimitUnit6_ClassifiesAsWeekly()
+    {
+        var json = """
+        {
+          "limits": [
+            { "type": "CREDIT_LIMIT", "unit": 6, "number": 1, "percentage": 20 }
+          ]
+        }
+        """;
+
+        var lines = ZAIUsageMapper.MapQuota(Body(json));
+
+        var weekly = Assert.IsType<MetricLine.Progress>(lines.Single(l => l.Label == "Weekly"));
+        Assert.Equal(20, weekly.Used);
+    }
+
+    [Fact]
     public void MapQuota_TimeLimit_ProducesWebSearchLine()
     {
         var json = """
