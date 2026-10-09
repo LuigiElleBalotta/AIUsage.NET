@@ -67,7 +67,7 @@ Git flow. `develop` is the default branch; `main` only ever holds released code.
   `develop`.
 - Tags drive `.github/workflows/release.yml`: `vX.Y.Z-N` (N incrementing: `v0.5.0-1`, `v0.5.0-2`) is a
   GitHub pre-release (Velopack feed flagged pre-release, no winget); `vX.Y.Z` is a real release
-  ("Latest") and also opens the winget-pkgs PR automatically (secret `WINGET_TOKEN`). A stable tag
+  ("Latest") and also opens the winget-pkgs PR automatically (`script/winget-submit.ps1` from the templates in `winget/`; secret `WINGET_TOKEN`). A stable tag
   must be on a commit already in `main`; the workflow rejects it otherwise.
 - Use git flow (AVH) to create and close branches: run `script/setup-gitflow.ps1` once per clone, then
   `git flow feature|bugfix|release|hotfix start <name>`. Release: `git flow release start X.Y.Z`, bump

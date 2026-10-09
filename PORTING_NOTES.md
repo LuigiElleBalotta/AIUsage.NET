@@ -601,7 +601,9 @@ eseguibile self-extracting; la CLI (`aiusage.exe`, non gestita da Velopack) cont
 - `[DIVERGENTE]` **Git flow + winget automatico**: `develop` è il branch di default, `main` contiene
   solo codice rilasciato (vedi "Branching & Releases" in `AGENTS.md`). Tag `vX.Y.Z-N` = pre-release
   GitHub (nessun winget), `vX.Y.Z` = release vera, valida solo se il commit è già su `main`, e apre in
-  automatico la PR su `microsoft/winget-pkgs` (job `winget` di `release.yml`, secret `WINGET_TOKEN`).
+  automatico la PR su `microsoft/winget-pkgs` (job `winget` di `release.yml`, secret `WINGET_TOKEN`) tramite `script/winget-submit.ps1`, che
+  genera i manifest dai template in `winget/` (winget-releaser/komac rilevava architettura `x86` e
+  switch sbagliati dall'installer Velopack e la validazione falliva).
   Imposto via rulesets GitHub (PR obbligatoria su `main`/`develop` con check `Branch Policy`, tag
   immutabili; i nomi dei branch sono validati dal check, non alla creazione) e `script/setup-gitflow.ps1` per configurare git flow AVH in locale.
   Nessun equivalente nella edizione Swift originale.
