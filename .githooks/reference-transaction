@@ -1,0 +1,20 @@
+#!/bin/sh
+# Rejects creating local branches that don't follow git flow naming (see "Branching & Releases" in
+# AGENTS.md). Branches made by `git flow ... start` always pass. Escape hatch: GITFLOW_SKIP=1.
+# Enabled by script/setup-gitflow.ps1 (core.hooksPath=.githooks).
+[ "$1" = "prepared" ] || exit 0
+[ -n "$GITFLOW_SKIP" ] && exit 0
+zero=0000000000000000000000000000000000000000
+while read -r old new ref; do
+  case "$ref" in refs/heads/*) ;; *) continue ;; esac
+  # only creations (old is all zeros); the sha256 object format uses 64 zeros
+  case "$old" in *[!0]*) continue ;; esac
+  case "$new" in *[!0]*) ;; *) continue ;; esac
+  name="${ref#refs/heads/}"
+  if ! printf '%s\n' "$name" | grep -Eq '^(main|develop|(feature|bugfix|support)/.+|(release|hotfix)/[0-9]+\.[0-9]+\.[0-9]+)$'; then
+    echo "error: branch '$name' does not follow git flow naming." >&2
+    echo "       Use: git flow feature|bugfix|release|hotfix start <name>  (run script/setup-gitflow.ps1 once)." >&2
+    exit 1
+  fi
+done
+exit 0

@@ -29,6 +29,9 @@ $cfg = @{
 }
 foreach ($k in $cfg.Keys) { git config $k $cfg[$k] }
 
+# Client-side guard: rejects hand-made branches (git branch / checkout -b) and non-git-flow names on push.
+git config core.hooksPath .githooks
+
 git flow config | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "git flow config check failed." }
 Write-Host "git flow configured: main/develop, tag prefix 'v'."
