@@ -9,6 +9,12 @@ public sealed class HttpRequestSpec
     public Dictionary<string, string> Headers { get; init; } = new();
     public byte[]? Body { get; init; }
     public TimeSpan Timeout { get; init; } = TimeSpan.FromSeconds(15);
+
+    /// <summary>
+    /// Set false for requests that carry credentials to a fixed origin: a redirect must never move
+    /// the bearer token somewhere else. Defaults to true to preserve the other providers' behavior.
+    /// </summary>
+    public bool FollowRedirects { get; init; } = true;
 }
 
 public sealed class HttpResponseResult
@@ -32,7 +38,10 @@ public interface IHttpClient
 /// </summary>
 public sealed class SystemHttpClient : IHttpClient
 {
-    private static readonly Lazy<System.Net.Http.HttpClient> SharedClient = new(() =>
+    private static readonly Lazy<System.Net.Http.HttpClient> SharedClient = new(() => CreateClient(followRedirects: true));
+    private static readonly Lazy<System.Net.Http.HttpClient> NoRedirectClient = new(() => CreateClient(followRedirects: false));
+
+    private static System.Net.Http.HttpClient CreateClient(bool followRedirects)
     {
         var handler = new System.Net.Http.HttpClientHandler();
         var proxy = ProxyConfig.Current;
@@ -42,11 +51,13 @@ public sealed class SystemHttpClient : IHttpClient
             handler.UseProxy = true;
             AppLog.Info(LogTag.Config, $"proxy enabled {proxy.Scheme}://{proxy.Host}:{proxy.Port}");
         }
+        handler.AllowAutoRedirect = followRedirects;
         return new System.Net.Http.HttpClient(handler);
-    });
+    }
 
     public async Task<HttpResponseResult> SendAsync(HttpRequestSpec request, CancellationToken cancellationToken = default)
     {
+        var client = request.FollowRedirects ? SharedClient.Value : NoRedirectClient.Value;
         using var message = new HttpRequestMessage(new HttpMethod(request.Method), request.Url);
         if (request.Body is not null)
         {
@@ -70,7 +81,7 @@ public sealed class SystemHttpClient : IHttpClient
         HttpResponseMessage response;
         try
         {
-            response = await SharedClient.Value.SendAsync(message, cts.Token).ConfigureAwait(false);
+            response = await client.SendAsync(message, cts.Token).ConfigureAwait(false);
         }
         catch (Exception ex)
         {

@@ -2,7 +2,7 @@ using AIUsage.Core.Providers;
 
 namespace AIUsage.Core.Models;
 
-public sealed record DailyUsageEntry(string Date, int TotalTokens, double? CostUSD = null);
+public sealed record DailyUsageEntry(string Date, long TotalTokens, double? CostUSD = null);
 
 public sealed record DailyUsageSeries(IReadOnlyList<DailyUsageEntry> Daily);
 
@@ -22,9 +22,9 @@ public static class UsageHistoryWindow
     }
 }
 
-public sealed record ModelUsageVariant(string Model, int TotalTokens, double? CostUSD = null);
+public sealed record ModelUsageVariant(string Model, long TotalTokens, double? CostUSD = null);
 
-public sealed record ModelUsageEntry(string Model, int TotalTokens, double? CostUSD = null, IReadOnlyList<ModelUsageVariant>? Variants = null)
+public sealed record ModelUsageEntry(string Model, long TotalTokens, double? CostUSD = null, IReadOnlyList<ModelUsageVariant>? Variants = null)
 {
     public const string UnattributedModelName = "Unattributed";
     public const string OtherModelName = "Other";
@@ -41,7 +41,7 @@ public sealed record ProviderUsageHistory(
 );
 
 public sealed record ModelUsageBreakdown(
-    int TotalTokens,
+    long TotalTokens,
     double? TotalCostUSD,
     IReadOnlyList<ModelUsageEntry> Models,
     string SourceNote

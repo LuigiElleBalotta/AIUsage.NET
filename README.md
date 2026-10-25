@@ -34,7 +34,7 @@ charts, local HTTP API, code signing, multi-account support, iCloud-equivalent s
 > logout in the live Kiro IDE session — see
 > [docs/providers/kiro.md](docs/providers/kiro.md) and
 > [issue #8](https://github.com/LuigiElleBalotta/AIUsage.NET/issues/8).
-- **OpenCode** — Go session/weekly/monthly caps, local daily spend
+- **OpenCode** — Go session/weekly/monthly quotas from OpenCode Console, local calendar-day spend
 - **OpenRouter** — credit balance, daily/weekly/monthly spend (API key)
 - **Z.ai** — session, weekly, web-search quotas (API key)
 

@@ -1,6 +1,16 @@
 namespace AIUsage.Core.Models;
 
-/// <summary>Latest normalized output for one provider refresh.</summary>
+/// <summary>
+/// Latest normalized output for one provider refresh. <see cref="LimitsError"/> is an optional
+/// nonfatal provider issue (such as quota unavailable while local usage is valid) that feeds the
+/// machine-facing limits errors without turning the snapshot into a fatal error.
+///
+/// <see cref="DataVersion"/> is optional provenance for providers whose persisted snapshot semantics
+/// changed incompatibly (currently OpenCode's server-normalized Console quota). It is internal cache
+/// metadata: the public local API wire shape does not expose it. A provider that relies on it owns
+/// the current marker and the compatibility rules; snapshots without a recognized marker keep their
+/// local data but are not treated as current authoritative data.
+/// </summary>
 public sealed record ProviderSnapshot(
     string ProviderId,
     string DisplayName,
@@ -9,7 +19,9 @@ public sealed record ProviderSnapshot(
     DateTimeOffset RefreshedAt,
     ProviderUsageHistory? UsageHistory = null,
     string? Warning = null,
-    ErrorCategory? ErrorCategoryValue = null
+    ErrorCategory? ErrorCategoryValue = null,
+    string? LimitsError = null,
+    string? DataVersion = null
 )
 {
     public MetricLine? Line(string label) => Lines.FirstOrDefault(l => l.Label == label);

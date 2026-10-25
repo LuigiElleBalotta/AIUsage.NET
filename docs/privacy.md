@@ -26,6 +26,11 @@ sent in the first place.
 
 - **Provider API calls** — the same calls the provider's own CLI/app/website would make, using your
   existing local credentials. See each provider's "Under the hood" section for the exact endpoints.
+- **OpenCode Go quota** — a read-only request to `https://opencode.ai/console/api/go/status` using the
+  OpenCode credential already on your machine. It carries the credential and workspace ID, never local
+  logs or usage. AIUsage.NET does not follow redirects for this request and only sends the credential
+  to the official `opencode.ai` Console origin. See
+  [OpenCode](providers/opencode.md#quota-request).
 - **Model pricing refresh** — public price lists from `raw.githubusercontent.com` (LiteLLM),
   `models.dev`, and the upstream OpenUsage project's GitHub Pages (the pricing supplement — see
   [Model pricing](pricing.md) for why this URL is used). These carry no usage or log data.
@@ -36,6 +41,7 @@ Nothing else. There is no analytics SDK, no crash reporter, and no other backgro
 
 - Local usage logs (Claude Code sessions, Codex rollouts, Grok's unified log, OpenCode's SQLite
   logs, Cursor's usage export) are read and priced entirely on your machine to produce the spend
-  tiles. No log content is ever sent anywhere.
+  tiles. No log content is ever sent anywhere. If an OpenCode query returns malformed data, the log
+  records only that the payload was malformed and the store path, never the row/message contents.
 - No account details, credentials, or raw provider API responses are logged or transmitted beyond
   the provider call that produced them.

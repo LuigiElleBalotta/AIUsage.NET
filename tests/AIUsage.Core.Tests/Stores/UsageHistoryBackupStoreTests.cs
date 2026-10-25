@@ -20,7 +20,7 @@ public class UsageHistoryBackupStoreTests : IDisposable
 
     private static readonly DateTimeOffset Now = new(2026, 7, 21, 9, 0, 0, TimeSpan.Zero);
 
-    private static ProviderUsageHistory MakeHistory(int tokens = 1000, double cost = 2.5) => new(
+    private static ProviderUsageHistory MakeHistory(long tokens = 1000, double cost = 2.5) => new(
         new DailyUsageSeries(new List<DailyUsageEntry> { new("2026-07-20", tokens, cost) }));
 
     private static ProviderSnapshotCache MakeCacheWithSnapshot(string providerId, ProviderUsageHistory? history)
@@ -160,5 +160,67 @@ public class ProviderSnapshotCacheMergeTests
         Assert.Equal(2, days.Count);
         Assert.Contains(days, d => d.Date == "2026-07-19" && d.TotalTokens == 100);
         Assert.Contains(days, d => d.Date == "2026-07-20" && d.TotalTokens == 200);
+    }
+
+    [Fact]
+    public void LegacyPersistedJsonAndLarge64BitCounts_RoundTripThroughSnapshotCacheAndHistoryMerge()
+    {
+        var settings = new InMemorySettingsStore();
+        // Cached JSON written when TotalTokens was a 32-bit int. The snapshot carries the current
+        // OpenCode quota provenance so this test stays about the 64-bit numeric round-trip, not the
+        // legacy-quota migration (covered separately).
+        settings.SetString("aiusage.providerSnapshots.v1", """
+            {
+              "opencode": {
+                "providerId": "opencode",
+                "displayName": "OpenCode",
+                "plan": "Go",
+                "lines": [],
+                "refreshedAt": "2026-07-21T09:00:00+00:00",
+                "dataVersion": "opencode-console-quota-v1",
+                "usageHistory": {
+                  "series": {
+                    "daily": [
+                      { "date": "2026-07-20", "totalTokens": 123456, "costUSD": 1.25 }
+                    ]
+                  },
+                  "modelUsage": {
+                    "daily": [
+                      {
+                        "date": "2026-07-20",
+                        "models": [
+                          { "model": "claude-sonnet-4", "totalTokens": 123456, "costUSD": 1.25 }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+            """);
+
+        var cache = new ProviderSnapshotCache(settings, allowsPersistedFreshness: true, now: () => Now);
+        var loaded = cache.Snapshot("opencode");
+        Assert.NotNull(loaded);
+        Assert.Equal(123456L, loaded!.UsageHistory!.Series.Daily.Single().TotalTokens);
+
+        var imported64Bit = new ProviderUsageHistory(
+            new DailyUsageSeries(new List<DailyUsageEntry>
+            {
+                new("2026-07-20", 5_000_000_000L, 25.0)
+            }),
+            new ModelUsageSeries(new List<DailyModelUsageEntry>
+            {
+                new("2026-07-20", new List<ModelUsageEntry>
+                {
+                    new("claude-sonnet-4", 5_000_000_000L, 25.0)
+                })
+            }));
+
+        Assert.True(cache.MergeUsageHistory("opencode", imported64Bit));
+
+        // Reload from a fresh cache instance over the same settings store to verify JSON persistence.
+        var reloaded = new ProviderSnapshotCache(settings, allowsPersistedFreshness: true, now: () => Now).Snapshot("opencode");
+        Assert.Equal(5_000_000_000L, reloaded!.UsageHistory!.Series.Daily.Single().TotalTokens);
     }
 }

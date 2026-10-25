@@ -1,5 +1,6 @@
 using AIUsage.Core.Models;
 using AIUsage.Core.Providers;
+using AIUsage.Core.Providers.OpenCode;
 using AIUsage.Core.Support;
 
 namespace AIUsage.Core.Stores;
@@ -138,6 +139,10 @@ public sealed class WidgetDataStore
                 ProviderErrors.Remove(providerId);
                 _failureRetryAfter.Remove(providerId);
 
+                // Defensive use-boundary guard: even a provider path that forgot to stamp the current
+                // quota semantics cannot put incompatible meters into the live snapshot store.
+                snapshot = OpenCodeQuotaCompatibility.Normalize(snapshot);
+
                 // Preserve the last-good normalized history when this pass's scan produced none (a
                 // live limits fetch can succeed while an optional local log/CSV scan finds nothing new).
                 if (snapshot.UsageHistory is null && Snapshots.TryGetValue(providerId, out var previous) && previous.UsageHistory is not null)
@@ -204,11 +209,93 @@ public sealed class WidgetDataStore
             result.HasData = false;
         }
 
-        result.DisplayMode = MeterStyle;
+        result.DisplayMode = descriptor.ValuePresentation == WidgetValuePresentation.RemainingPercent
+            ? WidgetDisplayMode.Remaining
+            : MeterStyle;
         result.ResetDisplayMode = ResetDisplayMode;
         result.AlwaysShowPacing = AlwaysShowPacing;
         return result;
     }
+
+    /// <summary>
+    /// Resolves provider-level status badges (such as OpenCode's "Go Quota" and "Local Usage"
+    /// warning/status lines) that do not map to an individual placed WidgetDescriptor, so the
+    /// provider card can surface reconnect, offline, schema, and partial-data statuses alongside
+    /// any valid quota or local-spend metrics.
+    ///
+    /// A fatal refresh failure is rendered here even when no snapshot has ever been stored, and when
+    /// a last-good snapshot is retained the failure text says that the card is showing that snapshot,
+    /// not current data. The retained snapshot's own status qualifiers (for example OpenCode's
+    /// "Local Usage: Partial Cost") are kept after the failure badge, because those caveats still
+    /// apply to the last successful values. Provider errors stay presentation-only: the retained
+    /// values/cache/history are never replaced by the error snapshot.
+    /// </summary>
+    public IReadOnlyList<WidgetData> StatusBadges(string providerId)
+    {
+        var hasSnapshot = Snapshots.TryGetValue(providerId, out var snapshot);
+        var failure = ProviderErrors.GetValueOrDefault(providerId);
+        var hasFailure = !string.IsNullOrWhiteSpace(failure);
+        if (!hasSnapshot && !hasFailure) return Array.Empty<WidgetData>();
+
+        var iconKey = _registry.Provider(providerId)?.IconKey ?? providerId;
+        var badges = hasSnapshot
+            ? SnapshotStatusBadges(providerId, snapshot!, iconKey)
+            : new List<WidgetData>();
+
+        if (hasFailure)
+        {
+            var subtitle = hasSnapshot
+                ? $"{failure} Showing last successful data from {LastSuccessfulLabel(snapshot!.RefreshedAt)}."
+                : failure;
+            badges.Insert(0, BadgeRow("Status", "Refresh Failed", subtitle, "#EF4444", iconKey));
+        }
+
+        return badges;
+    }
+
+    /// <summary>
+    /// Provider-level status badges carried by a snapshot that do not map to a placed
+    /// WidgetDescriptor. Shared by the normal and the retained-last-good path so a failure keeps the
+    /// same deduplicated qualifiers with the same texts and severities.
+    /// </summary>
+    private List<WidgetData> SnapshotStatusBadges(string providerId, ProviderSnapshot snapshot, string iconKey)
+    {
+        var descriptorLabels = _registry.DescriptorsFor(providerId)
+            .Select(d => d.MetricLabel)
+            .ToHashSet(StringComparer.Ordinal);
+        var seen = new HashSet<(string Label, string BadgeText, string Subtitle)>();
+        var badges = new List<WidgetData>();
+
+        foreach (var badge in snapshot.Lines.OfType<MetricLine.Badge>())
+        {
+            if (badge.IsError || badge.Label == "Status" || descriptorLabels.Contains(badge.Label)) continue;
+            if (!seen.Add((badge.Label, badge.BadgeText, badge.Subtitle ?? string.Empty))) continue;
+
+            var data = new WidgetData(badge.Label, iconKey, MetricKind.Count, 0, null)
+            {
+                DisplayMode = MeterStyle,
+                ResetDisplayMode = ResetDisplayMode,
+                AlwaysShowPacing = AlwaysShowPacing
+            };
+            badges.Add(ApplyBadge(badge, data));
+        }
+
+        return badges;
+    }
+
+    private WidgetData BadgeRow(string label, string text, string? subtitle, string? colorHex, string iconKey)
+    {
+        var data = new WidgetData(label, iconKey, MetricKind.Count, 0, null)
+        {
+            DisplayMode = MeterStyle,
+            ResetDisplayMode = ResetDisplayMode,
+            AlwaysShowPacing = AlwaysShowPacing
+        };
+        return ApplyBadge(new MetricLine.Badge(label, text, colorHex, subtitle), data);
+    }
+
+    private static string LastSuccessfulLabel(DateTimeOffset refreshedAt) =>
+        refreshedAt.ToLocalTime().ToString("MMM d, h:mm tt", System.Globalization.CultureInfo.GetCultureInfo("en-US"));
 
     private static WidgetData CloneSample(WidgetData sample)
     {
@@ -226,6 +313,7 @@ public sealed class WidgetDataStore
             IsSessionWindow = sample.IsSessionWindow,
             IsChart = sample.IsChart,
             ShowsResetExpiries = sample.ShowsResetExpiries,
+            BadgeSeverity = sample.BadgeSeverity,
             HasData = sample.HasData
         };
     }
@@ -236,10 +324,21 @@ public sealed class WidgetDataStore
         {
             case MetricLine.Progress p:
             {
-                var normalizedUsed = p.Format is ProgressFormat.Percent ? Support.ProviderParse.ClampPercent(p.Used) : p.Used;
-                var result = new WidgetData(descriptor.Sample.Title, descriptor.Sample.IconKey, p.Format.MetricKind, normalizedUsed, p.Limit)
+                // An opted-in widget shows the same bounded quota as percent left. Scale used and
+                // limit together (rather than treating remaining as used) so fraction, pacing, and
+                // severity stay identical to the provider's native-units view.
+                var showsRemainingPercent = descriptor.ValuePresentation == WidgetValuePresentation.RemainingPercent;
+                if (showsRemainingPercent && p.Limit <= 0) return null;
+
+                var kind = showsRemainingPercent ? MetricKind.Percent : p.Format.MetricKind;
+                var used = showsRemainingPercent
+                    ? p.Used / p.Limit * 100
+                    : p.Format is ProgressFormat.Percent ? Support.ProviderParse.ClampPercent(p.Used) : p.Used;
+                var limit = showsRemainingPercent ? 100 : p.Limit;
+
+                var result = new WidgetData(descriptor.Sample.Title, descriptor.Sample.IconKey, kind, used, limit)
                 {
-                    CountSuffix = p.Format.CountSuffix,
+                    CountSuffix = kind == MetricKind.Percent ? null : p.Format.CountSuffix,
                     ValuePrefix = descriptor.Sample.ValuePrefix,
                     ResetsAt = p.ResetsAt,
                     PeriodDurationMs = p.PeriodDurationMs,
@@ -266,9 +365,7 @@ public sealed class WidgetDataStore
             case MetricLine.Badge b:
             {
                 var data = CloneSample(descriptor.Sample);
-                data.ValueTextOverride = b.BadgeText;
-                data.SubtitleOverride = b.Subtitle;
-                return data;
+                return ApplyBadge(b, data);
             }
             case MetricLine.Chart c:
             {
@@ -283,4 +380,23 @@ public sealed class WidgetDataStore
                 return null;
         }
     }
+
+    private static WidgetData ApplyBadge(MetricLine.Badge badge, WidgetData data)
+    {
+        data.Limit = null;
+        data.ValueTextOverride = badge.BadgeText;
+        data.SubtitleOverride = badge.Subtitle;
+        data.BadgeSeverity = BadgeSeverityFor(badge.ColorHex);
+        data.HasData = true;
+        return data;
+    }
+
+    private static WidgetData.MeterSeverity? BadgeSeverityFor(string? colorHex) =>
+        colorHex?.Trim().ToUpperInvariant() switch
+        {
+            "#EF4444" => WidgetData.MeterSeverity.Critical,
+            "#F59E0B" => WidgetData.MeterSeverity.Warning,
+            "#22C55E" => WidgetData.MeterSeverity.Normal,
+            _ => null
+        };
 }
