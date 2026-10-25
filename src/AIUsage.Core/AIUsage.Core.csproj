@@ -21,4 +21,8 @@
     <None Include="Resources\**\*" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="AIUsage.Core.Tests" />
+  </ItemGroup>
+
 </Project>

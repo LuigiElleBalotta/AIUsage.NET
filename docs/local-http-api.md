@@ -26,7 +26,8 @@ integrations and the exact format printed by the `aiusage` CLI.
 Returns the same envelope containing the provider the ID names.
 
 - **200 OK** — limits envelope with the matched provider if it has data (an `errors` entry appears
-  when a refresh failed; a matched provider with no data yet simply has no entry).
+  for a refresh failure or a provider-reported partial issue; a matched provider with no data yet
+  simply has no entry).
 - **404 Not Found** — the ID names no known provider.
 
 > This port currently matches by exact provider ID only (`claude`, `codex`, `cursor`, etc.) — there
@@ -89,9 +90,12 @@ retry.
 `limit`, `remaining`, and a 0–1 `utilization`. Reset, window, and `estimated` fields appear only
 when the provider supplies that meaning. A provider or resource with no current value is omitted
 rather than invented as zero. `expiresAt` is always `fetchedAt` plus the same five-minute freshness
-interval used by the tray app and CLI; `stale` says whether that instant has passed. Refresh
-failures appear in `errors` as `{"providerId":"…","message":"…"}` while a last-good provider
-snapshot remains available.
+interval used by the tray app and CLI; `stale` says whether that instant has passed. `errors` carries
+both fatal refresh failures and provider-reported partial issues (for example OpenCode quota
+unavailable while local usage is still valid). A provider appears at most once; a fatal refresh error
+wins over its partial issue. A provider entry in `providers` can still be present when an error is
+listed, so check `errors` before assuming its resources are complete. For a fatal failure a last-good
+provider snapshot remains available. Only the providers selected by the request are considered.
 
 For bounded progress resources, `unit` follows the provider's live metric format. For example,
 Cursor `totalUsage` is `percent` on percentage-based plans, `requests` on request-based Enterprise

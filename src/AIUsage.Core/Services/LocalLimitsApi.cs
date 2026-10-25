@@ -27,9 +27,9 @@ public static class LocalLimitsApi
             providers[providerId] = WireProvider(snapshot, descriptors, state.GeneratedAtOrNow);
         }
 
-        var errors = providerIds
-            .Where(id => state.ErrorsOrEmpty.ContainsKey(id))
-            .Select(id => new Dictionary<string, object?> { ["providerId"] = id, ["message"] = state.ErrorsOrEmpty[id] })
+        var errors = LimitIssueSelection
+            .Select(providerIds, state.Snapshots, state.ErrorsOrEmpty)
+            .Select(issue => new Dictionary<string, object?> { ["providerId"] = issue.ProviderId, ["message"] = issue.Message })
             .ToList();
 
         var envelope = new Dictionary<string, object?>
