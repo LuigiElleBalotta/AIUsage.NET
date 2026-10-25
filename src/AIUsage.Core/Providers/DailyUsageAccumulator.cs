@@ -8,18 +8,24 @@ namespace AIUsage.Core.Providers;
 /// </summary>
 public sealed class DailyUsageAccumulator
 {
-    private readonly Dictionary<string, int> _tokensByDay = new();
+    private readonly Dictionary<string, long> _tokensByDay = new();
     private readonly Dictionary<string, double> _costByDay = new();
+    private readonly HashSet<string> _daysWithCost = new();
     private readonly Dictionary<string, HashSet<string>> _unknownModelsByDay = new();
     private readonly Dictionary<string, Dictionary<string, ModelAccumulator>> _modelsByDay = new();
 
     public static string DayKey(DateTimeOffset date) => date.ToString("yyyy-MM-dd");
     public static string DayKey(DateTime date) => date.ToString("yyyy-MM-dd");
 
-    public void Add(string day, int tokens, double cost, string model)
+    public void Add(string day, long tokens, double? cost, string model)
     {
-        _tokensByDay[day] = _tokensByDay.GetValueOrDefault(day) + tokens;
-        _costByDay[day] = _costByDay.GetValueOrDefault(day) + cost;
+        if (tokens < 0) throw new ArgumentOutOfRangeException(nameof(tokens));
+        _tokensByDay[day] = checked(_tokensByDay.GetValueOrDefault(day) + tokens);
+        if (cost is { } knownCost)
+        {
+            _costByDay[day] = _costByDay.GetValueOrDefault(day) + knownCost;
+            _daysWithCost.Add(day);
+        }
         if (!_modelsByDay.TryGetValue(day, out var models))
         {
             models = new Dictionary<string, ModelAccumulator>();
@@ -46,7 +52,10 @@ public sealed class DailyUsageAccumulator
     public LogUsageScan Build()
     {
         var days = _tokensByDay.Keys.OrderByDescending(k => k, StringComparer.Ordinal)
-            .Select(day => new DailyUsageEntry(day, _tokensByDay.GetValueOrDefault(day), _costByDay.GetValueOrDefault(day)))
+            .Select(day => new DailyUsageEntry(
+                day,
+                _tokensByDay.GetValueOrDefault(day),
+                _daysWithCost.Contains(day) ? _costByDay.GetValueOrDefault(day) : null))
             .ToList();
 
         var modelUsage = new ModelUsageSeries(
@@ -89,12 +98,12 @@ public sealed class DailyUsageAccumulator
 
     private sealed class ModelAccumulator
     {
-        private int _tokens;
+        private long _tokens;
         private double? _costUSD;
 
-        public void Add(int tokens, double? costUSD)
+        public void Add(long tokens, double? costUSD)
         {
-            _tokens += tokens;
+            _tokens = checked(_tokens + tokens);
             if (costUSD is { } c) _costUSD = (_costUSD ?? 0) + c;
         }
 

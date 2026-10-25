@@ -32,6 +32,7 @@ public sealed class WidgetData
     public long? PeriodDurationMs { get; set; }
     public string? ValueTextOverride { get; set; }
     public string? SubtitleOverride { get; set; }
+    public MeterSeverity? BadgeSeverity { get; set; }
     public string? LimitNoun { get; set; }
     public string? UnboundedValueWord { get; set; }
     public string? InfoNote { get; set; }
@@ -84,7 +85,7 @@ public sealed class WidgetData
     {
         get
         {
-            if (Limit is not { } limit || limit <= 0) return 0;
+            if (!HasData || Limit is not { } limit || limit <= 0) return 0;
             return Math.Min(Math.Max(RoundedDisplayValue / limit, 0), 1);
         }
     }
@@ -93,7 +94,7 @@ public sealed class WidgetData
     {
         get
         {
-            if (Limit is not { } limit || limit <= 0) return 0;
+            if (!HasData || Limit is not { } limit || limit <= 0) return 0;
             return Math.Min(Math.Max((limit - Used) / limit, 0), 1);
         }
     }
@@ -108,6 +109,7 @@ public sealed class WidgetData
     public abstract record MeterState
     {
         public sealed record NoData : MeterState;
+        public sealed record Neutral : MeterState;
         public sealed record Spent : MeterState;
         public sealed record RunningOut(string? Eta, double ProjectedFraction) : MeterState;
         public sealed record CloseToLimit(string Spare, double ProjectedFraction) : MeterState;
@@ -116,7 +118,7 @@ public sealed class WidgetData
 
         public MeterSeverity? Severity => this switch
         {
-            NoData => null,
+            NoData or Neutral => null,
             Spent or RunningOut => MeterSeverity.Critical,
             CloseToLimit => MeterSeverity.Warning,
             Healthy => MeterSeverity.Normal,
@@ -126,7 +128,7 @@ public sealed class WidgetData
 
         public string? Tooltip => this switch
         {
-            NoData or Level => null,
+            NoData or Neutral or Level => null,
             Spent => "Limit reached",
             Healthy h => $"~{(int)Math.Round((1 - h.ProjectedFraction) * 100)}% left at reset",
             CloseToLimit c => $"~{(int)Math.Round(c.ProjectedFraction * 100)}% used at reset",
@@ -196,6 +198,7 @@ public sealed class WidgetData
     {
         get
         {
+            if (!HasData) return null;
             if (SubtitleOverride is not null) return SubtitleOverride;
             if (ResetLabel is { } resetLabel) return resetLabel;
             if (PeriodDurationMs is { } periodMs)
@@ -234,6 +237,7 @@ public sealed class WidgetData
         get
         {
             if (!HasData) return NoDataSubtitle;
+            if (SubtitleOverride is not null) return SubtitleOverride;
             if (ValueTextOverride is not null) return ValueTextOverride;
             var selected = SelectedValues;
             if (selected.Count > 0)
@@ -319,6 +323,10 @@ public sealed class WidgetData
     {
         var now = nowOverride ?? DateTimeOffset.UtcNow;
         if (!HasData) return new MeterState.NoData();
+        if (ValueTextOverride is not null)
+        {
+            return BadgeSeverity is { } severity ? new MeterState.Level(severity) : new MeterState.Neutral();
+        }
         if (Limit is not { } limit || limit <= 0) return new MeterState.Level(MeterSeverity.Normal);
         if (RoundedAtDisplayPrecision(limit - Used) <= 0) return new MeterState.Spent();
 

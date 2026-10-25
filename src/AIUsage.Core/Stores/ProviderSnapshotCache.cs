@@ -1,5 +1,6 @@
 using System.Text.Json;
 using AIUsage.Core.Models;
+using AIUsage.Core.Providers.OpenCode;
 using AIUsage.Core.Services;
 using AIUsage.Core.Support;
 
@@ -112,6 +113,14 @@ public sealed class ProviderSnapshotCache
         var all = LoadPayload();
         if (!all.TryGetValue(providerId, out var snapshot)) return null;
 
+        // A legacy OpenCode quota cache entry keeps its local data in LoadSnapshots(), but it must
+        // never count as a fresh authoritative snapshot — even when its timestamp looks recent.
+        if (!OpenCodeQuotaCompatibility.IsEligibleForCacheHit(snapshot))
+        {
+            AppLog.Debug(LogTag.Cache, $"not a cache hit {providerId} (incompatible quota data version)");
+            return null;
+        }
+
         bool writtenThisSession;
         lock (_lock) { writtenThisSession = _sessionWrites.Contains(providerId); }
         var age = _now() - snapshot.RefreshedAt;
@@ -127,6 +136,10 @@ public sealed class ProviderSnapshotCache
             AppLog.Debug(LogTag.Cache, $"skip write {snapshot.ProviderId} (error snapshot)");
             return;
         }
+
+        // Normalize before the snapshot enters the in-memory payload or the persisted JSON, so an
+        // incompatible legacy shape can't be re-introduced through the write path either.
+        snapshot = OpenCodeQuotaCompatibility.Normalize(snapshot);
         AppLog.Debug(LogTag.Cache, $"write {snapshot.ProviderId}");
         lock (_lock) { _sessionWrites.Add(snapshot.ProviderId); }
 
@@ -151,8 +164,12 @@ public sealed class ProviderSnapshotCache
         if (raw is null) return new Dictionary<string, ProviderSnapshot>();
         try
         {
-            return JsonSerializer.Deserialize<Dictionary<string, ProviderSnapshot>>(raw, JsonOptions)
-                   ?? new Dictionary<string, ProviderSnapshot>();
+            var decoded = JsonSerializer.Deserialize<Dictionary<string, ProviderSnapshot>>(raw, JsonOptions)
+                          ?? new Dictionary<string, ProviderSnapshot>();
+            // Normalize on read as well as on write: the stored JSON may predate the current quota
+            // provenance marker, and every consumer (load, cache-hit check, history export) must see
+            // the same sanitized snapshot without a second migration path.
+            return decoded.ToDictionary(kv => kv.Key, kv => OpenCodeQuotaCompatibility.Normalize(kv.Value));
         }
         catch (Exception ex)
         {

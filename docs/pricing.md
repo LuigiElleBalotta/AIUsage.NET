@@ -3,7 +3,9 @@
 How AIUsage.NET turns token counts into the estimated dollars on the spend tiles (Claude, Codex,
 Cursor, Grok). OpenRouter and OpenCode are the exceptions: OpenRouter's API reports billed dollars
 directly, and OpenCode records its own per-message cost in its local logs, so nothing here applies to
-them.
+them. OpenCode's Go quota meters are different again: they are account-wide numbers reported by
+OpenCode Console, not a local estimate or an AIUsage.NET price table. Local OpenCode cost and the
+normalized Console quota are separate measurements and can differ.
 
 This is a faithful, 1:1 port of the original pricing engine (`AIUsage.Core/Pricing/`) — the layering,
 resolution rules, and refresh cadence below are unchanged from the Swift edition.

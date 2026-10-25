@@ -21,10 +21,12 @@ public sealed class UnknownProviderException : Exception
 public sealed class UsageReader
 {
     private readonly List<IProviderRuntime>? _providersOverride;
+    private readonly ProviderSnapshotCache? _cacheOverride;
 
-    public UsageReader(List<IProviderRuntime>? providersOverride = null)
+    public UsageReader(List<IProviderRuntime>? providersOverride = null, ProviderSnapshotCache? cache = null)
     {
         _providersOverride = providersOverride;
+        _cacheOverride = cache;
     }
 
     public async Task<UsageReadResult> ReadAsync(string? requestedProviderId = null, bool force = false, CancellationToken cancellationToken = default)
@@ -42,7 +44,7 @@ public sealed class UsageReader
         var enablement = new ProviderEnablementStore();
         bool IncludesProvider(string id) => requestedToken is not null ? id == requestedToken : enablement.IsEnabled(id);
 
-        var cache = new ProviderSnapshotCache(allowsPersistedFreshness: true);
+        var cache = _cacheOverride ?? new ProviderSnapshotCache(allowsPersistedFreshness: true);
         var orderedIds = registry.Providers.Select(p => p.Id).ToList();
         var enabledOrderedIds = orderedIds.Where(IncludesProvider).ToList();
 
@@ -51,7 +53,6 @@ public sealed class UsageReader
 
         var snapshots = cachedSnapshots;
         var errors = new Dictionary<string, string>();
-        var warnings = new List<string>();
 
         if (needsRefresh)
         {
@@ -66,8 +67,14 @@ public sealed class UsageReader
             }
             snapshots = dataStore.Snapshots;
             errors = new Dictionary<string, string>(dataStore.ProviderErrors);
-            warnings = orderedIds.Where(errors.ContainsKey).Select(id => $"{id}: {errors[id]}").ToList();
         }
+
+        // Cached reads and fresh refreshes share one issue selection so the CLI's stderr warnings
+        // always match the limits envelope's errors array.
+        var warnings = LimitIssueSelection
+            .Select(enabledOrderedIds, snapshots, errors)
+            .Select(issue => $"{issue.ProviderId}: {issue.Message}")
+            .ToList();
 
         var state = new LocalUsageApi.State(
             EnabledOrderedIds: enabledOrderedIds,

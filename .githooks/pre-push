@@ -1,0 +1,17 @@
+#!/bin/sh
+# Second barrier: refuses to push branches/tags with non-git-flow names. Escape hatch: GITFLOW_SKIP=1.
+[ -n "$GITFLOW_SKIP" ] && exit 0
+while read -r lref lsha rref rsha; do
+  case "$lsha" in *[!0]*) ;; *) continue ;; esac   # deleting a ref: allow
+  case "$rref" in
+    refs/heads/*)
+      name="${rref#refs/heads/}"
+      printf '%s\n' "$name" | grep -Eq '^(main|develop|(feature|bugfix|support|dependabot)/.+|(release|hotfix)/[0-9]+\.[0-9]+\.[0-9]+)$' || {
+        echo "error: refusing to push branch '$name': not a git flow name." >&2; exit 1; } ;;
+    refs/tags/*)
+      name="${rref#refs/tags/}"
+      printf '%s\n' "$name" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9]+)?$' || {
+        echo "error: refusing to push tag '$name': must be vX.Y.Z or vX.Y.Z-N." >&2; exit 1; } ;;
+  esac
+done
+exit 0

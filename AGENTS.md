@@ -67,11 +67,25 @@ Git flow. `develop` is the default branch; `main` only ever holds released code.
   `develop`.
 - Tags drive `.github/workflows/release.yml`: `vX.Y.Z-N` (N incrementing: `v0.5.0-1`, `v0.5.0-2`) is a
   GitHub pre-release (Velopack feed flagged pre-release, no winget); `vX.Y.Z` is a real release
-  ("Latest") and also opens the winget-pkgs PR automatically (secret `WINGET_TOKEN`). A stable tag
+  ("Latest") and also opens the winget-pkgs PR automatically (`script/winget-submit.ps1` from the templates in `winget/`; secret `WINGET_TOKEN`). A stable tag
   must be on a commit already in `main`; the workflow rejects it otherwise.
-- Release steps: `git checkout -b release/X.Y.Z develop`, bump `<Version>`, optionally tag
-  `vX.Y.Z-1` to test a pre-release, then PR `release/X.Y.Z` → `main`, tag `vX.Y.Z` on the merge
-  commit, and PR/merge `main` → `develop`.
+- Use git flow (AVH) to create and close branches: run `script/setup-gitflow.ps1` once per clone, then
+  `git flow feature|bugfix|release|hotfix start <name>`. Release: `git flow release start X.Y.Z`, bump
+  `<Version>`, tag `vX.Y.Z-1`.. from the release branch to test pre-releases, then
+  `git flow release finish -m "X.Y.Z" X.Y.Z` (merges into `main`, tags `vX.Y.Z`, back-merges into
+  `develop`, deletes the branch) and push `main`, `develop` and the tags. Hotfixes are the same with
+  `git flow hotfix`.
+- `script/setup-gitflow.ps1` also enables `.githooks` (`core.hooksPath`): `reference-transaction`
+  refuses to create local branches whose name isn't a git flow one, `pre-push` refuses bad branch/tag
+  names. Client-side only (`--no-verify` or `GITFLOW_SKIP=1` bypass it); GitHub-side checks below
+  are the real gate.
+- Enforced on GitHub (rulesets; repo admins bypass so `git flow ... finish` can push): `main` and
+  `develop` can't be deleted or force-pushed and need a PR with passing `Build and Test` and `Branch
+  Policy` checks (`.github/workflows/branch-policy.yml`: `main` only from `release|hotfix/X.Y.Z`,
+  `develop` only from git flow branches, so a wrongly named branch can't be merged); pushed tags can't
+  be moved or deleted, and `release.yml` rejects tags that aren't `vX.Y.Z` / `vX.Y.Z-N`. GitHub can't
+  restrict branch/tag names on creation on this plan. Stable tags also need the `WINGET_TOKEN` secret
+  (classic PAT: `public_repo` + `workflow`).
 
 ## Pull Requests
 

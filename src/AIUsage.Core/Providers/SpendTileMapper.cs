@@ -132,7 +132,7 @@ public static class SpendTileMapper
         return (models ?? new HashSet<string>()).OrderBy(m => m, StringComparer.Ordinal).ToList();
     }
 
-    private static List<MetricValue> SpendValues(int tokens, double? costUSD, bool estimated)
+    private static List<MetricValue> SpendValues(long tokens, double? costUSD, bool estimated)
     {
         var values = new List<MetricValue>();
         if (costUSD is { } cost) values.Add(new MetricValue(cost, MetricKind.Dollars, Estimated: estimated));
@@ -145,14 +145,14 @@ public static class SpendTileMapper
 
     private sealed class ModelAccumulator
     {
-        public int Tokens;
+        public long Tokens;
         public double? CostUSD;
-        private readonly Dictionary<string, int> _spellingWeights = new();
-        private readonly Dictionary<string, (int Tokens, double? CostUSD, Dictionary<string, int> Weights)> _variants = new();
+        private readonly Dictionary<string, long> _spellingWeights = new();
+        private readonly Dictionary<string, (long Tokens, double? CostUSD, Dictionary<string, long> Weights)> _variants = new();
 
         public string? DisplayName => BestSpelling(_spellingWeights);
 
-        private static string? BestSpelling(Dictionary<string, int> weights)
+        private static string? BestSpelling(Dictionary<string, long> weights)
         {
             if (weights.Count == 0) return null;
             return weights
@@ -164,9 +164,10 @@ public static class SpendTileMapper
 
         public void Add(ModelUsageEntry entry, string spelledAs)
         {
-            Tokens += entry.TotalTokens;
+            Tokens = checked(Tokens + entry.TotalTokens);
             if (entry.CostUSD is { } cost) CostUSD = (CostUSD ?? 0) + cost;
-            _spellingWeights[spelledAs] = _spellingWeights.GetValueOrDefault(spelledAs) + Math.Max(entry.TotalTokens, 1);
+            var weight = Math.Max(entry.TotalTokens, 1L);
+            _spellingWeights[spelledAs] = checked(_spellingWeights.GetValueOrDefault(spelledAs) + weight);
 
             var variants = entry.Variants ?? new List<ModelUsageVariant> { new(spelledAs, entry.TotalTokens, entry.CostUSD) };
             foreach (var variant in variants)
@@ -177,21 +178,22 @@ public static class SpendTileMapper
 
         public void Fold(ModelUsageEntry entry)
         {
-            Tokens += entry.TotalTokens;
+            Tokens = checked(Tokens + entry.TotalTokens);
             if (entry.CostUSD is { } cost) CostUSD = (CostUSD ?? 0) + cost;
             MergeVariant(entry.Model, entry.TotalTokens, entry.CostUSD);
         }
 
-        private void MergeVariant(string model, int tokens, double? costUSD)
+        private void MergeVariant(string model, long tokens, double? costUSD)
         {
             var key = model.ToLowerInvariant();
             if (!_variants.TryGetValue(key, out var existing))
             {
-                existing = (0, null, new Dictionary<string, int>());
+                existing = (0L, null, new Dictionary<string, long>());
             }
-            existing.Tokens += tokens;
+            existing.Tokens = checked(existing.Tokens + tokens);
             if (costUSD is { } c) existing.CostUSD = (existing.CostUSD ?? 0) + c;
-            existing.Weights[model] = existing.Weights.GetValueOrDefault(model) + Math.Max(tokens, 1);
+            var weight = Math.Max(tokens, 1L);
+            existing.Weights[model] = checked(existing.Weights.GetValueOrDefault(model) + weight);
             _variants[key] = existing;
         }
 
@@ -212,7 +214,7 @@ public static class SpendTileMapper
     private static ModelUsageBreakdown? ModelBreakdown(
         ModelUsageSeries? usage,
         HashSet<string> days,
-        int totalTokens,
+        long totalTokens,
         double? totalCostUSD,
         string? sourceNote)
     {
