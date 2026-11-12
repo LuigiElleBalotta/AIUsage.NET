@@ -62,9 +62,14 @@ Convenzione: ogni voce ha un tag di stato:
 
 ## Credenziali: mapping macOS → Windows
 
+`[DIVERGENTE]` Le letture con coppia servizio/account rispettano il target nativo
+`servizio:account` di go-keyring (per Antigravity: `gemini:antigravity`). Il vecchio
+prefisso `AIUsage:` rimane come fallback di compatibilità. Le letture e scritture
+con il solo servizio mantengono il namespace privato `AIUsage:`.
+
 | Originale (macOS) | Windows | Stato |
 |---|---|---|
-| Keychain (`security` CLI) | Windows Credential Manager (`CredRead`/`CredWrite` via P/Invoke, `advapi32.dll`) | `[DIVERGENTE]` — vedi `Services/SystemClients.cs` → `WindowsCredentialAccessor`. Target name prefissato `OpenUsage:` per non collidere con credenziali di altre app. |
+| Keychain (`security` CLI) | Windows Credential Manager (`CredRead`/`CredWrite` via P/Invoke, `advapi32.dll`) | `[DIVERGENTE]` — vedi `Services/SystemClients.cs` → `WindowsCredentialAccessor`. Namespace privato `AIUsage:` per le operazioni con il solo servizio; per le letture servizio/account si usa prima il target nativo `servizio:account`, poi il vecchio target prefissato come fallback. |
 | File config (`~/.claude/.credentials.json`, `~/.codex/auth.json`, ecc.) | Stessi file JSON, path espanso da `~` a `%USERPROFILE%` | `[FEDELE]` per i tool CLI cross-platform (Claude Code, Codex CLI, ecc. scrivono lo stesso file su ogni OS) |
 | SQLite (Cursor `state.vscdb`) | Stesso file, letto con `Microsoft.Data.Sqlite` invece del CLI `sqlite3` | `[DIVERGENTE]` — vedi `SqliteDataAccessor`. Nessun processo esterno necessario. |
 | File con permessi 0600 (scrittura atomica) | Scrittura atomica (temp file + rename) + ACL NTFS ristretta all'utente corrente via `FileSystemAccessRule` | `[DIVERGENTE]` — vedi `LocalTextFileAccessor.WriteText` |

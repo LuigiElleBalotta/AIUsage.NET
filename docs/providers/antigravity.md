@@ -24,7 +24,7 @@ While a pool's rolling 5-hour window has no usage yet, that meter reads **Not st
 AIUsage.NET never asks for a token — it reads what Antigravity already has:
 
 - **Antigravity running** — AIUsage.NET talks to the app's local language server (the richest source, and where the plan name comes from). It's discovered by scanning running processes for `language_server` / `agy` (via WMI's `Win32_Process.CommandLine`, since Windows has no single `ps`-equivalent command) and mapping the matching process's PID to its listening TCP ports with `netstat -ano`.
-- **App closed** — it falls back to the OAuth token Antigravity / `agy` store in Windows Credential Manager and queries Google's Cloud Code API. An expired token is refreshed automatically (AIUsage.NET never writes back to Antigravity's own credential entry). Its short-lived cache is reused only while the same Credential Manager login is present and readable.
+- **App closed** — it falls back to the OAuth token Antigravity / `agy` store in Windows Credential Manager under `gemini:antigravity` and queries Google's Cloud Code API. The native target is tried first, with `AIUsage:gemini:antigravity` retained as a compatibility fallback. An expired token is refreshed automatically (AIUsage.NET never writes back to Antigravity's own credential entry). Its short-lived cache is reused only while the same Credential Manager login is present and readable.
 
 If neither is available you'll see *Start Antigravity or run `agy` and try again.*
 
