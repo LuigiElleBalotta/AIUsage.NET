@@ -128,7 +128,11 @@ public sealed class WindowsCredentialAccessor : IKeychainAccessing
 
     public string? ReadGenericPassword(string service) => ReadInternal(TargetPrefix + service);
 
-    public string? ReadGenericPassword(string service, string account) => ReadInternal($"{TargetPrefix}{service}:{account}");
+    // Service/account pairs belong to external tools (for example go-keyring).
+    // Do not put AIUsage's private namespace in front of their native target.
+    // Keep the old prefixed lookup as a compatibility fallback.
+    public string? ReadGenericPassword(string service, string account) =>
+        ReadInternal($"{service}:{account}") ?? ReadInternal($"{TargetPrefix}{service}:{account}");
 
     public void WriteGenericPassword(string service, string value) => WriteInternal(TargetPrefix + service, value);
 
